@@ -25,3 +25,15 @@ uv run python doctor.py      # check DB + Gemini are reachable and agree with .e
 uv run pytest                # unit + DB integration tests (DB must be running)
 uv run pytest -m live        # tests that call the real Gemini API
 ```
+
+## Web app (Next.js)
+
+Run from `web/` (`web/.env` is a symlink to the root `.env`):
+
+```bash
+npm install
+npm run dev                  # http://localhost:3100  (health: /api/health)
+npm test                     # unit tests
+npm run test:int             # + DB integration tests (DB must be running)
+npm run test:live            # + tests that call the real Gemini API
+```
