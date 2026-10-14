@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from gemini import BATCH_SIZE, Embedder, is_retryable, l2_normalize
+from gemini import BATCH_SIZE, Embedder, RateLimiter, is_retryable, l2_normalize
 
 
 class FakeApiError(Exception):
@@ -80,7 +80,7 @@ def test_rate_limit_is_retried_with_backoff():
     embedder, models, sleeps = make_embedder(failures=[FakeApiError(429)])
     assert len(embedder.embed(["hello"], "RETRIEVAL_DOCUMENT")) == 1
     assert len(models.calls) == 2
-    assert sleeps == [1.0]
+    assert sleeps == [15.0]  # quota windows are per minute: never retry a 429 after only a second
 
 
 def test_bad_request_fails_immediately():
@@ -124,3 +124,39 @@ def test_zero_vector_cannot_be_normalised():
 )
 def test_is_retryable(exc, expected):
     assert is_retryable(exc) is expected
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+        self.sleeps = []
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def test_rate_limiter_waits_for_the_window_to_free_up():
+    clock = FakeClock()
+    limiter = RateLimiter(100, clock=lambda: clock.now, sleep=clock.sleep)
+    limiter.acquire(100)
+    clock.now = 10.0
+    limiter.acquire(50)
+    assert clock.sleeps == [50.0]  # the first 100 leave the 60s window at t=60
+    with pytest.raises(ValueError):
+        limiter.acquire(101)
+
+
+def test_embedder_asks_the_limiter_before_each_batch():
+    class RecordingLimiter:
+        def __init__(self):
+            self.asked = []
+
+        def acquire(self, n):
+            self.asked.append(n)
+
+    limiter = RecordingLimiter()
+    models = FakeModels(4)
+    embedder = Embedder(SimpleNamespace(models=models), "gemini-embedding-001", 4, sleep=lambda s: None, limiter=limiter)
+    embedder.embed([f"t{i}" for i in range(150)], "RETRIEVAL_DOCUMENT")
+    assert limiter.asked == [100, 50]

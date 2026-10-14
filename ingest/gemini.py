@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 from typing import Callable, Literal, Sequence, TypeVar
 
 import httpx
@@ -14,6 +15,7 @@ from config import Settings
 TaskType = Literal["RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY"]
 BATCH_SIZE = 100
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+RATE_LIMIT_DELAY = 15.0  # quota windows are per minute; a 1s retry after a 429 just fails again
 T = TypeVar("T")
 
 
@@ -36,7 +38,10 @@ def with_retry(
         except Exception as exc:
             if attempt == attempts or not is_retryable(exc):
                 raise
-            sleep(base_delay * 2 ** (attempt - 1))
+            delay = base_delay * 2 ** (attempt - 1)
+            if getattr(exc, "code", None) == 429:
+                delay = max(delay, RATE_LIMIT_DELAY * attempt)
+            sleep(delay)
     raise AssertionError("unreachable")
 
 
@@ -47,12 +52,35 @@ def l2_normalize(vec: Sequence[float]) -> list[float]:
     return [v / norm for v in vec]
 
 
+class RateLimiter:
+    """At most `per_minute` texts in any rolling 60-second window."""
+
+    def __init__(self, per_minute: int, clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep):
+        self.per_minute = per_minute
+        self._clock = clock
+        self._sleep = sleep
+        self._sent: deque[tuple[float, int]] = deque()
+
+    def acquire(self, n: int) -> None:
+        if n > self.per_minute:
+            raise ValueError(f"batch of {n} exceeds the {self.per_minute}/minute limit")
+        while True:
+            now = self._clock()
+            while self._sent and now - self._sent[0][0] >= 60:
+                self._sent.popleft()
+            if sum(count for _, count in self._sent) + n <= self.per_minute:
+                self._sent.append((now, n))
+                return
+            self._sleep(60 - (now - self._sent[0][0]))
+
+
 class Embedder:
-    def __init__(self, client, model: str, dim: int, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, client, model: str, dim: int, sleep: Callable[[float], None] = time.sleep, limiter: RateLimiter | None = None):
         self._client = client
         self._model = model
         self._dim = dim
         self._sleep = sleep
+        self._limiter = limiter
 
     def embed(self, texts: Sequence[str], task_type: TaskType) -> list[list[float]]:
         if any(not text.strip() for text in texts):
@@ -64,6 +92,8 @@ class Embedder:
 
     def _embed_batch(self, batch: list[str], task_type: TaskType) -> list[list[float]]:
         config = types.EmbedContentConfig(task_type=task_type, output_dimensionality=self._dim)
+        if self._limiter is not None:
+            self._limiter.acquire(len(batch))
         response = with_retry(
             lambda: self._client.models.embed_content(model=self._model, contents=batch, config=config),
             sleep=self._sleep,
@@ -79,4 +109,4 @@ def make_client(settings: Settings) -> genai.Client:
 
 
 def make_embedder(settings: Settings) -> Embedder:
-    return Embedder(make_client(settings), settings.embed_model, settings.embed_dim)
+    return Embedder(make_client(settings), settings.embed_model, settings.embed_dim, limiter=RateLimiter(settings.embed_per_minute))
