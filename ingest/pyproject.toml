@@ -8,6 +8,8 @@ dependencies = [
   "pgvector>=0.5",
   "numpy>=1.26",
   "python-dotenv>=1.2",
+  "pymupdf>=1.28",
+  "tiktoken>=0.9",
 ]
 
 [dependency-groups]
