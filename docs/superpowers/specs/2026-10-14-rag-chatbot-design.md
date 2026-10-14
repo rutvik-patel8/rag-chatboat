@@ -168,14 +168,15 @@ CREATE INDEX chunks_doc_section    ON chunks (doc_id, section_id, seq);
 
 Probing showed GPO marks headings by **font face and colour, not size** (narrative body is Garamond Light 9.8pt; the computed body size is 12pt only because of the financial half), so the rules are style-based:
 
-- **Skipped pages:** 1, 31–33 (covers and the statements' contents page).
+- **Skipped pages:** 1, 29–33 (covers, a blank page, the back cover and the statements' contents page).
+- **Extra boilerplate band:** lines repeated on ≥ 3 pages within 12% of the top/bottom edge are also removed — the financial pages' footer ("…Financial Year In Review – FY 2018") and page numbers sit 9–11% from the bottom, outside the shared 8% band.
 - **Narrative pages (≤ 30):** level 1 = HelveticaNeue Medium 10pt grey `#646e74` ("GPO and Congress"); level 2 = HelveticaNeue Medium 9.5pt blue `#507cbf`, standalone or **run-in** (the heading starts a body line; the rest of the line stays body text). The same face in dark grey `#404041` is inline emphasis/URLs and in teal `#4e89a8` chart titles — neither is a heading.
-- **Financial pages (≥ 34):** level 1 = lines ≥ 20pt (divider pages "SECTION I" + "MANAGEMENT DISCUSSION AND ANALYSIS (UNAUDITED)"); level 2 = bold face, 11.5–14.5pt, < 90 chars, not numeric, not ending in ":", **alone on its row** (rules out bold table labels and memo fields), and not a title-block line repeated on ≥ 3 pages ("U.S. Government Publishing Office").
-- **Titles:** level-1 lines on one page, and vertically adjacent level-2 lines, merge into one title. A page-top title that PDF order places after body text is moved first. Where the PDF has no heading, the profile injects one: p2 "Letter of Transmittal", p7 "About GPO"; the p14 infographic gets its own one-page section "GPO By the Numbers FY 2018".
+- **Financial pages (≥ 34):** single-column, so lines are read top to bottom (PDF order puts some note tables after the next heading). Level 1 = lines ≥ 20pt (divider pages "SECTION I" + "MANAGEMENT DISCUSSION AND ANALYSIS (UNAUDITED)"); level 2 = Arial Bold or Times New Roman Bold (the OIG memo's Cambria/Calibri Bold labels are not headings), 11.5–14.5pt, < 90 chars, not numeric, not ending in ":", **alone on its row** (rules out bold table labels and memo fields), and not a title-block line repeated on ≥ 3 pages ("U.S. Government Publishing Office").
+- **Titles:** level-1 lines on one page, and vertically adjacent level-2 lines, merge into one title. A page-top title that PDF order places after body text is moved first. Where the PDF has no heading, the profile injects one: p2 "Letter of Transmittal", p7 "About GPO"; p28 "Organizational Chart"; the two infographic pages 14–15 share one stand-alone section "GPO By the Numbers FY 2018", after which the interrupted section resumes.
 - **Sections:** root → level 1 → level 2, path `"<L1> › <L2>"`. Text chunks ~500 tokens, ~75 overlap, packed per section — never across a heading.
 - **Captions:** HelveticaNeue Roman 8.2pt lines on narrative pages → `kind=caption` chunks, kept out of text chunks.
 - **Drop caps:** a one-letter line ≥ 3× body size rejoins the line it starts ("T" + "he U.S. Government…").
-- **Tables:** pages 14, 58, 59, 60 → row reconstruction over the page (heading, margin and repeated title lines excluded), lone `$` cells merged with their value, header = rows through the `2018 | 2017` row, split at ≤ 450 tokens with the header repeated.
+- **Tables:** pages 14, 15, 58, 59, 60 → row reconstruction over the page (heading, margin and repeated title lines excluded), lone `$` cells merged with their value, short all-number rows (`2018 | 2017`) right-aligned over the value columns, header = rows through the `2018 | 2017` row, split at ≤ 450 tokens with the header repeated.
 - No routing hints, no summaries — this is the control case.
 
 ### 5.3 GEP — `hierarchical` profile
