@@ -1,0 +1,66 @@
+from collections import Counter
+
+import pytest
+
+from helpers import make_line, make_page
+from model import ChunkDraft, Note, SectionDraft
+from parse.footnotes import NoteIndex
+from pipeline import DocSpec, Prepared, attach_footnotes, check_token_limit, note_chunks, section_for_page
+from chunk.plain import build
+from report import Report
+
+SECTIONS = [
+    SectionDraft("root", "Doc", 0, "", 1, 200),
+    SectionDraft("ch2", "Ch. 2", 1, "Ch. 2", 69, 106, parent_key="root"),
+    SectionDraft("ch2/sar", "South Asia", 2, "Ch. 2 › South Asia", 95, 98, parent_key="ch2"),
+]
+
+
+def test_section_for_page_picks_the_deepest_match():
+    assert section_for_page(SECTIONS, 96).key == "ch2/sar"
+    assert section_for_page(SECTIONS, 70).key == "ch2"
+    assert section_for_page(SECTIONS, 5).key == "root"
+
+
+def test_note_chunks_are_footnote_kind_in_the_notes_section():
+    [chunk] = note_chunks([Note(1, 96, "Fiscal years.")], SECTIONS)
+    assert (chunk.section_key, chunk.kind, chunk.content, chunk.page_start) == ("ch2/sar", "footnote", "Footnote 1: Fiscal years.", 96)
+
+
+def test_attach_footnotes_resolves_and_reports_unresolved():
+    chunks = [ChunkDraft("root", "text", "58 percent less energy", 7, 7, refs=(18, 4))]
+    report = Report("imac", "iMac")
+    attach_footnotes(chunks, NoteIndex([Note(18, 12, "ENERGY STAR rules.")], frozenset({12})), report)
+    assert chunks[0].footnotes == [{"n": 18, "text": "ENERGY STAR rules."}]
+    assert report.unresolved == [(7, 4)]
+
+
+def test_token_limit_fails_before_embedding():
+    chunk = ChunkDraft("root", "table", "x", 186, 186)
+    with pytest.raises(ValueError, match="p.186"):
+        check_token_limit(["word " * 2100], [chunk])
+    check_token_limit(["short"], [chunk])  # no error
+
+
+def test_report_format_lists_counts_and_unresolved():
+    report = Report("imac", "iMac report")
+    report.pages, report.sections, report.notes = 12, 1, 19
+    report.chunks_by_kind = Counter({"text": 15, "footnote": 19})
+    report.unresolved = [(3, 12)]
+    text = report.format()
+    assert "imac — iMac report" in text
+    assert "footnote 19, text 15 (total 34)" in text
+    assert "p3:12" in text
+
+
+def test_plain_profile_handles_empty_pages_and_no_notes(tmp_path):
+    pages = [
+        make_page(1, []),  # photo-only page
+        make_page(2, [make_line("GPO distributed 802,834 copies of 4,211 titles.")]),
+        make_page(3, [make_line("Second page text.")]),
+    ]
+    spec = DocSpec("gpo", "GPO 2018 Annual Report", tmp_path / "x.pdf", "plain")
+    result = build(spec, Prepared(pages, 10.0, NoteIndex([]), 3, 0))
+    [root] = result.sections
+    assert (root.key, root.level, root.page_start, root.page_end) == ("root", 0, 1, 3)
+    assert [c.content for c in result.chunks] == ["GPO distributed 802,834 copies of 4,211 titles.\n\nSecond page text."]
