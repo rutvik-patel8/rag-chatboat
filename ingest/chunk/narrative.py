@@ -11,7 +11,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
-from model import Line, Page, Span
+from chunk.common import count_tokens, pack, paragraphs_from_pages
+from model import ChunkDraft, Line, Page, SectionDraft, Span
+from parse.boilerplate import in_margin
+from parse.tables import merge_symbol_cells, region_rows, split_table
+from pipeline import BuildResult, DocSpec, Prepared
+
+TARGET_TOKENS = 500
+OVERLAP_TOKENS = 75
+TABLE_TOKENS = 450
 
 _BOLD = re.compile(r"Bold", re.I)
 _NUMERIC = re.compile(r"[\d$,.()\s%-]+")
@@ -152,3 +160,106 @@ def hoist_page_title(page: Page, is_title: Callable[[Line], bool]) -> Page:
     titles = [l for l in page.lines if is_title(l) and l.bbox[1] <= top]
     rest = [l for l in page.lines if not any(l is t for t in titles)]
     return replace(page, lines=tuple(titles + rest))
+
+
+def build(spec: DocSpec, prepared: Prepared, layout: NarrativeLayout = GPO_LAYOUT) -> BuildResult:
+    pages = [merge_drop_caps(p, prepared.body_size) for p in prepared.pages]
+    repeated = repeated_titles(pages, layout)
+
+    def heading_of(line: Line, page: Page) -> Heading | None:
+        if page.number <= layout.narrative_last_page:
+            return narrative_heading(line, layout)
+        return financial_heading(line, page, repeated)
+
+    pages = [hoist_page_title(p, lambda l, p=p: heading_of(l, p) is not None) for p in pages]
+    root = SectionDraft("root", spec.title, 0, "", pages[0].number, pages[-1].number)
+    sections: list[SectionDraft] = [root]
+    body: dict[str, list[tuple[int, Line]]] = defaultdict(list)
+    captions: dict[str, list[tuple[int, Line]]] = defaultdict(list)
+    tables: list[tuple[str, int, list[Line], Page]] = []
+    state = {"l1": None, "current": root, "last": None}  # last = (section, heading line) until body follows
+
+    def open_section(level: int, title: str, page_no: int, line: Line | None) -> None:
+        parent = root if level == 1 or state["l1"] is None else state["l1"]
+        path = title if parent is root else f"{parent.title} › {title}"
+        section = SectionDraft(f"s{len(sections)}", title, level, path, page_no, page_no, parent_key=parent.key)
+        sections.append(section)
+        if level == 1:
+            state["l1"] = section
+        state["current"] = section
+        state["last"] = (section, line) if line is not None else None
+
+    def add_heading(heading: Heading, line: Line, page: Page) -> None:
+        last = state["last"]
+        adjacent = last is not None and line.bbox[1] - last[1].bbox[3] < 0.6 * line.size
+        if last and last[0].level == heading.level and last[0].page_start == page.number and (heading.level == 1 or adjacent):
+            # one title split over lines: "SECTION I" + "MANAGEMENT" + …, or a wrapped bold heading
+            section = last[0]
+            section.title = f"{section.title} {heading.title}"
+            section.path = section.title if section.parent_key == "root" else f"{state['l1'].title} › {section.title}"
+            state["last"] = (section, line)
+        else:
+            open_section(heading.level, heading.title, page.number, line)
+        if heading.rest is not None:
+            body[state["current"].key].append((page.number, heading.rest))
+            state["last"] = None
+
+    for page in pages:
+        resume = None
+        if page.number in layout.single_page_sections:  # a stand-alone page (infographic) between sections
+            resume = (state["l1"], state["current"])
+            open_section(1, layout.single_page_sections[page.number], page.number, None)
+        elif page.number in layout.injected:
+            open_section(1, layout.injected[page.number], page.number, None)
+        table_lines: list[Line] = []
+        for line in page.lines:
+            heading = heading_of(line, page)
+            if heading:
+                add_heading(heading, line, page)
+                continue
+            state["last"] = None
+            key = state["current"].key
+            if page.number in layout.table_pages:
+                if not in_margin(line, page) and line.text not in repeated:
+                    table_lines.append(line)
+            elif page.number <= layout.narrative_last_page and is_caption(line, layout):
+                captions[key].append((page.number, line))
+            else:
+                body[key].append((page.number, line))
+        if table_lines:
+            tables.append((state["current"].key, page.number, table_lines, page))
+        if resume is not None:
+            state["l1"], state["current"] = resume
+            state["last"] = None
+
+    vocab = prepared.vocab or None
+    chunks: list[ChunkDraft] = []
+    by_key = {s.key: s for s in sections}
+
+    def pseudo_pages(items: list[tuple[int, Line]]) -> list[Page]:
+        grouped: dict[int, list[Line]] = defaultdict(list)
+        for page_no, line in items:
+            grouped[page_no].append(line)
+        return [Page(n, pages[0].width, pages[0].height, tuple(ls)) for n, ls in sorted(grouped.items())]
+
+    for section in sections:
+        paragraphs = paragraphs_from_pages(pseudo_pages(body[section.key]), vocab)
+        section.content = "\n\n".join(p.text for p in paragraphs) or None
+        for packed in pack(paragraphs, TARGET_TOKENS, OVERLAP_TOKENS):
+            chunks.append(ChunkDraft(section.key, "text", packed.text, packed.page_start, packed.page_end, refs=packed.refs))
+        for caption in paragraphs_from_pages(pseudo_pages(captions[section.key]), vocab):
+            chunks.append(ChunkDraft(section.key, "caption", caption.text, caption.page, caption.page))
+    for key, page_no, lines, page in tables:
+        rows = merge_symbol_cells(region_rows(replace(page, lines=tuple(lines)), (0, 0, page.width, page.height)))
+        header_rows = next((i + 1 for i, row in enumerate(rows) if "2018" in row), 1)
+        for piece in split_table(rows, header_rows, TABLE_TOKENS, count_tokens):
+            chunks.append(ChunkDraft(key, "table", piece, page_no, page_no))
+
+    for chunk in chunks:  # a section spans every page it holds content on
+        section = by_key[chunk.section_key]
+        section.page_end = max(section.page_end, chunk.page_end)
+    for section in sections:
+        if section.parent_key and section.parent_key != "root":
+            parent = by_key[section.parent_key]
+            parent.page_end = max(parent.page_end, section.page_end)
+    return BuildResult(sections, chunks)
