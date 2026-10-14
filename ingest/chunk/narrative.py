@@ -13,7 +13,7 @@ from typing import Callable
 
 from chunk.common import count_tokens, pack, paragraphs_from_pages
 from model import ChunkDraft, Line, Page, SectionDraft, Span
-from parse.boilerplate import in_margin
+from parse.boilerplate import find_boilerplate, in_margin, strip_boilerplate
 from parse.tables import merge_symbol_cells, region_rows, split_table
 from pipeline import BuildResult, DocSpec, Prepared
 
@@ -46,6 +46,8 @@ class NarrativeLayout:
     injected: dict[int, str] = field(default_factory=lambda: {2: "Letter of Transmittal", 7: "About GPO"})
     single_page_sections: dict[int, str] = field(default_factory=lambda: {14: "GPO By the Numbers FY 2018"})
     table_pages: frozenset[int] = frozenset({14, 58, 59, 60})
+    # The financial pages' footer and page number sit ~9–11% from the bottom, inside the shared 8% band's blind spot.
+    footer_margin: float = 0.12
 
 
 GPO_LAYOUT = NarrativeLayout()
@@ -169,6 +171,8 @@ def top_to_bottom(page: Page) -> Page:
 
 def build(spec: DocSpec, prepared: Prepared, layout: NarrativeLayout = GPO_LAYOUT) -> BuildResult:
     pages = [merge_drop_caps(p, prepared.body_size) for p in prepared.pages]
+    footers = find_boilerplate(pages, margin=layout.footer_margin, min_ratio=0, min_pages=3)
+    pages = strip_boilerplate(pages, footers, margin=layout.footer_margin)
     pages = [top_to_bottom(p) if p.number > layout.narrative_last_page else p for p in pages]
     repeated = repeated_titles(pages, layout)
 

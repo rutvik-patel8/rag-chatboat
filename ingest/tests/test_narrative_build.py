@@ -91,3 +91,14 @@ def test_note_tables_stay_under_their_own_note(built):
     assert ("text", "SECTION IV FINANCIAL STATEMENTS › 15. Major Customers") in customers
     assert not [path for _, path in customers if "16. Subsequent Events" in path]
     assert ("text", "SECTION IV FINANCIAL STATEMENTS › 3. Accounts Receivable, Net") in hits(built, "Total accounts receivable, net")
+
+
+def test_financial_footer_and_page_numbers_are_stripped(built):
+    import re
+
+    result, _ = built
+    assert not hits(built, "Financial Year In Review")
+    lone_numbers = [
+        line for c in result.chunks if c.kind == "table" for line in c.content.splitlines() if re.fullmatch(r"\| \d+ \|(\s+\|)*", line)
+    ]
+    assert lone_numbers == []
