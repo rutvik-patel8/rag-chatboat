@@ -84,3 +84,10 @@ def test_chunks_stay_inside_their_section_and_size(built):
     assert sum(c.kind == "text" for c in result.chunks) >= 100
     assert len(result.sections) >= 100
     assert by_key[next(s.key for s in result.sections if s.path.endswith("› govinfo"))].content
+
+
+def test_note_tables_stay_under_their_own_note(built):
+    customers = hits(built, "270,596")
+    assert ("text", "SECTION IV FINANCIAL STATEMENTS › 15. Major Customers") in customers
+    assert not [path for _, path in customers if "16. Subsequent Events" in path]
+    assert ("text", "SECTION IV FINANCIAL STATEMENTS › 3. Accounts Receivable, Net") in hits(built, "Total accounts receivable, net")

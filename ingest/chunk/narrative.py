@@ -162,8 +162,14 @@ def hoist_page_title(page: Page, is_title: Callable[[Line], bool]) -> Page:
     return replace(page, lines=tuple(titles + rest))
 
 
+def top_to_bottom(page: Page) -> Page:
+    """Single-column pages read top to bottom; PDF order can put a table after the next heading."""
+    return replace(page, lines=tuple(sorted(page.lines, key=lambda l: (round(l.bbox[1]), l.bbox[0]))))
+
+
 def build(spec: DocSpec, prepared: Prepared, layout: NarrativeLayout = GPO_LAYOUT) -> BuildResult:
     pages = [merge_drop_caps(p, prepared.body_size) for p in prepared.pages]
+    pages = [top_to_bottom(p) if p.number > layout.narrative_last_page else p for p in pages]
     repeated = repeated_titles(pages, layout)
 
     def heading_of(line: Line, page: Page) -> Heading | None:
