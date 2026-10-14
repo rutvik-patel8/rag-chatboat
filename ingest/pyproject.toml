@@ -1,0 +1,23 @@
+[project]
+name = "rag-ingest"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "google-genai>=2.30",
+  "psycopg[binary]>=3.3",
+  "pgvector>=0.5",
+  "numpy>=1.26",
+  "python-dotenv>=1.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = [
+  "integration: needs the Docker DB (docker compose up -d --wait db)",
+  "live: calls the real Gemini API; run with: uv run pytest -m live",
+]
