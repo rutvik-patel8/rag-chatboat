@@ -45,9 +45,14 @@ class NarrativeLayout:
     level1: Style = Style("HelveticaNeueLTStd-Md", 10.0, 0x646E74)  # grey section titles
     level2: Style = Style("HelveticaNeueLTStd-Md", 9.5, 0x507CBF)  # blue sub-headings, often run-in
     caption: tuple[str, float] = ("HelveticaNeueLTStd-Roman", 8.2)
-    injected: dict[int, str] = field(default_factory=lambda: {2: "Letter of Transmittal", 7: "About GPO"})
-    single_page_sections: dict[int, str] = field(default_factory=lambda: {14: "GPO By the Numbers FY 2018"})
-    table_pages: frozenset[int] = frozenset({14, 58, 59, 60})
+    injected: dict[int, str] = field(
+        default_factory=lambda: {2: "Letter of Transmittal", 7: "About GPO", 28: "Organizational Chart"}
+    )
+    # Pages outside the reading flow (the infographic); consecutive pages with one title share a section.
+    standalone_pages: dict[int, str] = field(
+        default_factory=lambda: {14: "GPO By the Numbers FY 2018", 15: "GPO By the Numbers FY 2018"}
+    )
+    table_pages: frozenset[int] = frozenset({14, 15, 58, 59, 60})
     # The financial pages' footer and page number sit ~9–11% from the bottom, inside the shared 8% band's blind spot.
     footer_margin: float = 0.12
 
@@ -217,11 +222,17 @@ def build(spec: DocSpec, prepared: Prepared, layout: NarrativeLayout = GPO_LAYOU
             body[state["current"].key].append((page.number, heading.rest))
             state["last"] = None
 
+    standalone: tuple[SectionDraft, tuple] | None = None  # (section, state to resume after it)
     for page in pages:
         resume = None
-        if page.number in layout.single_page_sections:  # a stand-alone page (infographic) between sections
+        title = layout.standalone_pages.get(page.number)
+        if title and standalone and standalone[0].title == title:
+            resume = standalone[1]
+            state["l1"] = state["current"] = standalone[0]
+        elif title:
             resume = (state["l1"], state["current"])
-            open_section(1, layout.single_page_sections[page.number], page.number, None)
+            open_section(1, title, page.number, None)
+            standalone = (state["current"], resume)
         elif page.number in layout.injected:
             open_section(1, layout.injected[page.number], page.number, None)
         table_lines: list[Line] = []

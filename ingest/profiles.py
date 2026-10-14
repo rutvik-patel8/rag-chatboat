@@ -13,7 +13,7 @@ DOCS: dict[str, DocSpec] = {
         "GPO 2018 Annual Report",
         DOCS_DIR / "GPO-Anual-report.pdf",
         "narrative",
-        skip_pages=frozenset({1, 31, 32, 33}),  # covers and the statements' contents page
+        skip_pages=frozenset({1, 29, 30, 31, 32, 33}),  # covers, blank page, statements' contents page
     ),
     "gep": DocSpec("gep", "Global Economic Prospects, June 2026", DOCS_DIR / "GEP-Jun-2026.pdf", "plain"),
     "imac": DocSpec(

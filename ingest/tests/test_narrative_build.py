@@ -20,7 +20,7 @@ def hits(built, needle):
 
 def test_gpo_uses_the_narrative_profile_and_skips_covers():
     assert DOCS["gpo"].profile == "narrative"
-    assert DOCS["gpo"].skip_pages == frozenset({1, 31, 32, 33})
+    assert DOCS["gpo"].skip_pages == frozenset({1, 29, 30, 31, 32, 33})
 
 
 def test_section_tree_has_the_expected_titles(built):
@@ -63,7 +63,7 @@ def test_captions_are_separate_chunks(built):
 def test_statement_tables_are_aligned_and_not_repeated_as_text(built):
     result, _ = built
     tables = [c for c in result.chunks if c.kind == "table"]
-    assert [c.page_start for c in tables] == [14, 58, 58, 59, 60, 60]
+    assert [c.page_start for c in tables] == [14, 15, 58, 58, 59, 60, 60]
     assert any("| Fund balance with Treasury (Note 2) | $644,807 | $585,883 |" in c.content for c in tables)
     assert all(c.content.startswith("| (Dollars in Thousands) |") for c in tables if c.page_start >= 58)
     assert not hits(built, "Fund balance with Treasury (Note 2)") or all(k == "table" for k, _ in hits(built, "Fund balance with Treasury (Note 2)"))
@@ -113,3 +113,18 @@ def test_oig_memo_and_letter_spaced_cover_open_no_sections(built):
 def test_statement_year_header_sits_over_the_value_columns(built):
     tables = [c.content for c in built[0].chunks if c.kind == "table" and c.page_start >= 58]
     assert tables and all("\n|  | 2018 | 2017 |\n" in t for t in tables)
+
+
+def test_by_the_numbers_spans_both_infographic_pages(built):
+    result, by_key = built
+    [numbers] = [s for s in result.sections if s.title == "GPO By the Numbers FY 2018"]
+    assert (numbers.page_start, numbers.page_end) == (14, 15)
+    assert ("table", "GPO By the Numbers FY 2018") in hits(built, "424 million")
+    assert ("table", "GPO By the Numbers FY 2018") in hits(built, "802,834")
+
+
+def test_org_chart_has_its_own_section_and_back_pages_are_skipped(built):
+    result, _ = built
+    assert ("text", "Organizational Chart") in hits(built, "Laurie Hall")
+    [statements] = [s for s in result.sections if s.title == "Financial Statements"]
+    assert statements.page_end <= 27
