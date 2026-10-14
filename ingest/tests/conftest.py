@@ -19,3 +19,11 @@ def gep_pages():
 @pytest.fixture(scope="session")
 def gpo_pages():
     return load_pages(DOCS / "GPO-Anual-report.pdf")
+
+
+@pytest.fixture(scope="session")
+def gpo_prepared():
+    from pipeline import prepare
+    from profiles import DOCS
+
+    return prepare(DOCS["gpo"])

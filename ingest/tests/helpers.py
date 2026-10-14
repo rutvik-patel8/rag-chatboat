@@ -12,3 +12,7 @@ def make_page(number, lines, width=600.0, height=800.0):
 
 def line_with(page, text):
     return next(line for line in page.lines if text in line.text)
+
+
+def page_of(pages, number):
+    return next(page for page in pages if page.number == number)
