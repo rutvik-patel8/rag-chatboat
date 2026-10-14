@@ -71,9 +71,17 @@ def section_for_page(sections: list[SectionDraft], page: int) -> SectionDraft:
     return max(containing, key=lambda s: s.level) if containing else min(sections, key=lambda s: s.level)
 
 
-def note_chunks(notes: list[Note], sections: list[SectionDraft]) -> list[ChunkDraft]:
+def note_chunks(notes: list[Note], sections: list[SectionDraft], cited: dict[Note, str] | None = None) -> list[ChunkDraft]:
+    """A note lives in the section of the first chunk citing it; uncited notes fall back to their page."""
+    cited = cited or {}
     return [
-        ChunkDraft(section_for_page(sections, note.page).key, "footnote", f"Footnote {note.n}: {note.text}", note.page, note.page)
+        ChunkDraft(
+            cited.get(note) or section_for_page(sections, note.page).key,
+            "footnote",
+            f"Footnote {note.n}: {note.text}",
+            note.page,
+            note.page,
+        )
         for note in notes
     ]
 
@@ -106,8 +114,8 @@ def run(spec: DocSpec, profile: Profile, settings: Settings, conn, embedder, cac
     report = Report(spec.slug, spec.title)
     prepared = prepare(spec)
     result = profile(spec, prepared)
-    chunks = result.chunks + note_chunks(prepared.notes.notes, result.sections)
-    attach_footnotes(chunks, prepared.notes, report)
+    cited = attach_footnotes(result.chunks, prepared.notes, report)
+    chunks = result.chunks + note_chunks(prepared.notes.notes, result.sections, cited)
     paths = {s.key: s.path for s in result.sections}
     texts = [build_embed_text(spec.title, paths[c.section_key], c.page_start, c.page_end, c.kind, c.content) for c in chunks]
     check_token_limit(texts, chunks)

@@ -101,3 +101,10 @@ def test_prepare_keeps_raw_pages_for_profiles():
     raw11 = next(p for p in prepared.raw_pages if p.number == 11)
     assert any(l.text.startswith("1 Product recycled") for l in raw11.lines)
     assert not any("iMac | Product Environmental Report" in l.text for p in prepared.raw_pages for l in p.lines)
+
+
+def test_note_chunk_goes_to_the_section_that_cites_it():
+    note = Note(1, 96, "Fiscal years.")
+    [cited] = note_chunks([note], SECTIONS, cited={note: "ch2"})
+    [uncited] = note_chunks([Note(2, 96, "Other.")], SECTIONS, cited={note: "ch2"})
+    assert (cited.section_key, uncited.section_key) == ("ch2", "ch2/sar")
