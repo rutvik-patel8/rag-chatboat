@@ -54,7 +54,7 @@ def test_default_checks_every_known_document_and_missing_ones_fail(conn):
     assert main(["--doc", "test-validate"]) == 0
 
 
-def store_gpo_like(conn, slug, with_table=True):
+def store_gpo_like(conn, slug, with_table=True, with_footer=False):
     settings = load_settings()
     vec = [1.0] + [0.0] * (settings.embed_dim - 1)
     sections = [
@@ -62,7 +62,9 @@ def store_gpo_like(conn, slug, with_table=True):
         SectionDraft("msg", "A Message from the Acting Deputy Director", 1, "A Message from the Acting Deputy Director", 4, 6, "root"),
         SectionDraft("otg", "GPO and Open, Transparent Government", 1, "GPO and Open, Transparent Government", 19, 23, "root"),
         SectionDraft("gi", "govinfo", 2, "GPO and Open, Transparent Government › govinfo", 22, 23, "otg"),
-        SectionDraft("num", "GPO By the Numbers FY 2018", 1, "GPO By the Numbers FY 2018", 14, 14, "root"),
+        SectionDraft("num", "GPO By the Numbers FY 2018", 1, "GPO By the Numbers FY 2018", 14, 15, "root"),
+        SectionDraft("fs", "SECTION IV FINANCIAL STATEMENTS", 1, "SECTION IV FINANCIAL STATEMENTS", 57, 82, "root"),
+        SectionDraft("mc", "15. Major Customers", 2, "SECTION IV FINANCIAL STATEMENTS › 15. Major Customers", 81, 81, "fs"),
     ]
     chunks = [
         ChunkDraft("msg", "text", "in FY 2018 GPO staff visited 166 depository libraries in 25 states", 5, 5),
@@ -70,6 +72,9 @@ def store_gpo_like(conn, slug, with_table=True):
         ChunkDraft("msg", "text", "GPO procured more than $375 million worth of printing", 5, 5),
     ]
     chunks += [ChunkDraft("msg", "caption", f"Caption {i}.", 5, 5) for i in range(15)]
+    chunks.append(ChunkDraft("mc", "text", "Department of State $ 270,596 33.3%", 81, 81))
+    if with_footer:
+        chunks.append(ChunkDraft("fs", "text", "U. S. Government Publishing Office | Financial Year In Review – FY 2018", 60, 60))
     if with_table:
         chunks += [ChunkDraft("num", "table", "| Revenues from procured printing | $375.7 million |", 14, 14) for _ in range(4)]
     store_document(
@@ -83,7 +88,7 @@ def test_gpo_checks_pass_on_a_document_with_the_brief_facts(conn):
 
     store_gpo_like(conn, "test-gpo")
     results = [check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]]
-    assert len(results) == 7
+    assert len(results) == 9
     assert all(r.ok for r in results), [r for r in results if not r.ok]
 
 
@@ -93,3 +98,11 @@ def test_gpo_checks_report_a_missing_table_fact(conn):
     store_gpo_like(conn, "test-gpo", with_table=False)
     failed = [r.name for r in (check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]) if not r.ok]
     assert failed == ["table chunk with '$375.7 million' in GPO By the Numbers FY 2018", "at least 4 table chunks"]
+
+
+def test_gpo_checks_report_a_leaked_footer(conn):
+    from validate import DOC_CHECKS
+
+    store_gpo_like(conn, "test-gpo", with_footer=True)
+    failed = [r.name for r in (check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]) if not r.ok]
+    assert failed == ["no chunk with 'Financial Year In Review'"]

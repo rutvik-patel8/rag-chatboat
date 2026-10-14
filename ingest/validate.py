@@ -38,6 +38,17 @@ def chunk_with(needle: str, kind: str | None = None, path: str | None = None) ->
     return check
 
 
+def no_chunk_with(needle: str) -> Check:
+    def check(conn: psycopg.Connection, slug: str) -> CheckResult:
+        n = conn.execute(
+            "SELECT count(*) FROM chunks c JOIN documents d ON d.id = c.doc_id WHERE d.slug = %s AND strpos(c.content, %s) > 0",
+            (slug, needle),
+        ).fetchone()[0]
+        return CheckResult(f"no chunk with {needle!r}", n == 0, f"{n} found")
+
+    return check
+
+
 def kind_at_least(kind: str, minimum: int) -> Check:
     def check(conn: psycopg.Connection, slug: str) -> CheckResult:
         n = conn.execute(
@@ -70,6 +81,8 @@ DOC_CHECKS: dict[str, list[Check]] = {
         chunk_with("procured more than $375 million", "text"),
         chunk_with("$375.7 million", "table", "GPO By the Numbers FY 2018"),
         section_exists("GPO and Open, Transparent Government › govinfo"),
+        chunk_with("270,596", "text", "SECTION IV FINANCIAL STATEMENTS › 15. Major Customers"),
+        no_chunk_with("Financial Year In Review"),
         kind_at_least("caption", 15),
         kind_at_least("table", 4),
     ],
