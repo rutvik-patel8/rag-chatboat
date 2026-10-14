@@ -21,10 +21,13 @@ Design: `docs/superpowers/specs/2026-10-14-rag-chatbot-design.md`.
 Run from `ingest/` (uses [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-uv sync                      # install dependencies
-uv run python doctor.py      # check DB + Gemini are reachable and agree with .env
-uv run pytest                # unit + DB integration tests (DB must be running)
-uv run pytest -m live        # tests that call the real Gemini API
+uv sync                          # install dependencies
+uv run python doctor.py          # check DB + Gemini are reachable and agree with .env
+uv run python ingest.py          # ingest all three PDFs (or: --doc imac, repeatable)
+uv run python ingest.py --doc imac --reset   # re-run without cached embeddings/vision/summaries
+uv run python validate.py        # post-ingest checks for every stored document
+uv run pytest                    # unit + DB integration tests (DB must be running)
+uv run pytest -m live            # tests that call the real Gemini API
 ```
 
 ## Web app (Next.js)
