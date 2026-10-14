@@ -93,3 +93,10 @@ def test_note_lines_keep_compound_hyphens(gep_pages):
 
     texts = [n.text for n in notes_of(gep_pages, range(1, 201))]
     assert not [t for t in texts if re.search(r"[a-z]- [a-z]", t)]
+
+
+def test_space_separated_marker_lists_are_stripped(gep_pages):
+    page = strip_markers(gep_pages[186])
+    line = next(l for l in page.lines if l.text.startswith("Myanmar"))
+    assert line.text == "Myanmar"
+    assert [r.n for r in line.refs] == [3, 4]

@@ -12,6 +12,6 @@ OVERLAP_TOKENS = 75
 def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
     numbers = [page.number for page in prepared.pages]
     root = SectionDraft("root", spec.title, 0, "", min(numbers), max(numbers))
-    packed = pack(paragraphs_from_pages(prepared.pages), TARGET_TOKENS, OVERLAP_TOKENS)
+    packed = pack(paragraphs_from_pages(prepared.pages, prepared.vocab or None), TARGET_TOKENS, OVERLAP_TOKENS)
     chunks = [ChunkDraft("root", "text", p.text, p.page_start, p.page_end, refs=p.refs) for p in packed]
     return BuildResult([root], chunks)

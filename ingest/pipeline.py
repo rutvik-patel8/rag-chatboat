@@ -13,7 +13,7 @@ from embed import embed_texts
 from model import ChunkDraft, Note, Page, SectionDraft
 from parse.boilerplate import find_boilerplate, strip_boilerplate
 from parse.footnotes import NoteIndex, split_notes, strip_markers
-from parse.pdf_text import body_font_size, load_pages
+from parse.pdf_text import body_font_size, load_pages, word_vocabulary
 from report import Report
 from store import DocumentMeta, store_document
 
@@ -37,6 +37,8 @@ class Prepared:
     notes: NoteIndex
     page_count: int
     boilerplate: int
+    raw_pages: list[Page] = field(default_factory=list)  # boilerplate stripped; notes and markers still in place
+    vocab: frozenset[str] = frozenset()  # document words, for line-end hyphen decisions
 
 
 @dataclass
@@ -54,13 +56,14 @@ def prepare(spec: DocSpec) -> Prepared:
     body = body_font_size(pages)
     keys = find_boilerplate(pages)
     kept = [p for p in strip_boilerplate(pages, keys) if p.number not in spec.skip_pages]
+    vocab = word_vocabulary(kept)
     notes: list[Note] = []
     clean: list[Page] = []
     for page in kept:
-        page_notes, rest = split_notes(page, body)
+        page_notes, rest = split_notes(page, body, vocab)
         notes += page_notes
         clean.append(strip_markers(rest))
-    return Prepared(clean, body, NoteIndex(notes, spec.endnote_pages), len(pages), len(keys))
+    return Prepared(clean, body, NoteIndex(notes, spec.endnote_pages), len(pages), len(keys), kept, vocab)
 
 
 def section_for_page(sections: list[SectionDraft], page: int) -> SectionDraft:

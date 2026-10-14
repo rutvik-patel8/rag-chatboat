@@ -8,7 +8,7 @@ from model import Line, Note, Page, Ref
 from parse.pdf_text import join_lines
 
 _NUMBER = re.compile(r"\d{1,3}")
-_MARKER = re.compile(r"\s*\d{1,3}(?:\s*,\s*\d{1,3})*\s*")
+_MARKER = re.compile(r"\s*\d{1,3}(?:(?:\s*,\s*|\s+)\d{1,3})*\s*")  # "18", "12,13", GEP tables: "3 4"
 
 
 def note_number(line: Line) -> int | None:

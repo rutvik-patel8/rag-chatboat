@@ -89,3 +89,15 @@ def test_every_gep_page_footnote_reaches_a_chunk():
     cited = {(f["n"], f["text"]) for c in result.chunks for f in c.footnotes}
     assert len(prepared.notes.notes) == 32
     assert cited == {(n.n, n.text) for n in prepared.notes.notes}
+
+
+def test_prepare_keeps_raw_pages_for_profiles():
+    from pipeline import prepare
+    from profiles import DOCS
+
+    prepared = prepare(DOCS["imac"])
+    raw7 = next(p for p in prepared.raw_pages if p.number == 7)
+    assert any(s.text == "18" and s.is_superscript for l in raw7.lines for s in l.spans)
+    raw11 = next(p for p in prepared.raw_pages if p.number == 11)
+    assert any(l.text.startswith("1 Product recycled") for l in raw11.lines)
+    assert not any("iMac | Product Environmental Report" in l.text for p in prepared.raw_pages for l in p.lines)
