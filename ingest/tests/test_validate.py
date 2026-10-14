@@ -52,3 +52,44 @@ def test_default_checks_every_known_document_and_missing_ones_fail(conn):
     assert slugs_to_check(None) == ["gpo", "gep", "imac"]
     assert main(["--doc", "test-missing"]) == 1
     assert main(["--doc", "test-validate"]) == 0
+
+
+def store_gpo_like(conn, slug, with_table=True):
+    settings = load_settings()
+    vec = [1.0] + [0.0] * (settings.embed_dim - 1)
+    sections = [
+        SectionDraft("root", "GPO", 0, "", 2, 82),
+        SectionDraft("msg", "A Message from the Acting Deputy Director", 1, "A Message from the Acting Deputy Director", 4, 6, "root"),
+        SectionDraft("otg", "GPO and Open, Transparent Government", 1, "GPO and Open, Transparent Government", 19, 23, "root"),
+        SectionDraft("gi", "govinfo", 2, "GPO and Open, Transparent Government › govinfo", 22, 23, "otg"),
+        SectionDraft("num", "GPO By the Numbers FY 2018", 1, "GPO By the Numbers FY 2018", 14, 14, "root"),
+    ]
+    chunks = [
+        ChunkDraft("msg", "text", "in FY 2018 GPO staff visited 166 depository libraries in 25 states", 5, 5),
+        ChunkDraft("msg", "text", "was the full-scale deployment of govinfo, our public-facing repository", 4, 4),
+        ChunkDraft("msg", "text", "GPO procured more than $375 million worth of printing", 5, 5),
+    ]
+    chunks += [ChunkDraft("msg", "caption", f"Caption {i}.", 5, 5) for i in range(15)]
+    if with_table:
+        chunks += [ChunkDraft("num", "table", "| Revenues from procured printing | $375.7 million |", 14, 14) for _ in range(4)]
+    store_document(
+        conn, DocumentMeta(slug, "GPO", "narrative", 82), sections, chunks,
+        [c.content for c in chunks], [vec] * len(chunks), settings.embed_model, settings.embed_dim,
+    )
+
+
+def test_gpo_checks_pass_on_a_document_with_the_brief_facts(conn):
+    from validate import DOC_CHECKS
+
+    store_gpo_like(conn, "test-gpo")
+    results = [check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]]
+    assert len(results) == 7
+    assert all(r.ok for r in results), [r for r in results if not r.ok]
+
+
+def test_gpo_checks_report_a_missing_table_fact(conn):
+    from validate import DOC_CHECKS
+
+    store_gpo_like(conn, "test-gpo", with_table=False)
+    failed = [r.name for r in (check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]) if not r.ok]
+    assert failed == ["table chunk with '$375.7 million' in GPO By the Numbers FY 2018", "at least 4 table chunks"]
