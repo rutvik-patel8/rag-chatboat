@@ -20,11 +20,20 @@ class Span:
 
 
 @dataclass(frozen=True)
+class Ref:
+    """A footnote marker: note number `n` cited on `page`, at character `offset` of its line/paragraph text."""
+
+    page: int
+    n: int
+    offset: int = 0
+
+
+@dataclass(frozen=True)
 class Line:
     spans: tuple[Span, ...]
     bbox: BBox
     block: int
-    refs: tuple[int, ...] = ()  # footnote numbers whose markers were removed from this line
+    refs: tuple[Ref, ...] = ()  # markers removed from this line, offsets into `text`
 
     @property
     def text(self) -> str:
@@ -74,6 +83,6 @@ class ChunkDraft:
     content: str
     page_start: int
     page_end: int
-    refs: tuple[int, ...] = ()
+    refs: tuple[tuple[int, int], ...] = ()  # (page, n) of each footnote marker in this chunk
     metadata: dict = field(default_factory=dict)
     footnotes: list[dict] = field(default_factory=list)  # [{n, text}], filled by the pipeline

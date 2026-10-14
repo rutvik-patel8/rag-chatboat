@@ -28,7 +28,7 @@ def test_note_chunks_are_footnote_kind_in_the_notes_section():
 
 
 def test_attach_footnotes_resolves_and_reports_unresolved():
-    chunks = [ChunkDraft("root", "text", "58 percent less energy", 7, 7, refs=(18, 4))]
+    chunks = [ChunkDraft("root", "text", "58 percent less energy", 7, 7, refs=((7, 18), (7, 4)))]
     report = Report("imac", "iMac")
     attach_footnotes(chunks, NoteIndex([Note(18, 12, "ENERGY STAR rules.")], frozenset({12})), report)
     assert chunks[0].footnotes == [{"n": 18, "text": "ENERGY STAR rules."}]
@@ -64,3 +64,28 @@ def test_plain_profile_handles_empty_pages_and_no_notes(tmp_path):
     [root] = result.sections
     assert (root.key, root.level, root.page_start, root.page_end) == ("root", 0, 1, 3)
     assert [c.content for c in result.chunks] == ["GPO distributed 802,834 copies of 4,211 titles.\n\nSecond page text."]
+
+
+def test_refs_resolve_on_their_own_page_and_report_each_marker_once():
+    index = NoteIndex([Note(2, 43, "Oil-exporting economies.")])
+    chunks = [
+        ChunkDraft("root", "text", "spans p42-43", 42, 43, refs=((43, 2), (43, 2))),
+        ChunkDraft("root", "text", "overlap tail", 43, 43, refs=((43, 2), (26, 2))),
+        ChunkDraft("root", "table", "table", 26, 26, refs=((26, 2),)),
+    ]
+    report = Report("gep", "GEP")
+    attach_footnotes(chunks, index, report)
+    assert chunks[0].footnotes == [{"n": 2, "text": "Oil-exporting economies."}]
+    assert report.unresolved == [(26, 2)]
+
+
+def test_every_gep_page_footnote_reaches_a_chunk():
+    from pipeline import prepare
+    from profiles import DOCS
+
+    prepared = prepare(DOCS["gep"])
+    result = build(DOCS["gep"], prepared)
+    attach_footnotes(result.chunks, prepared.notes, Report("gep", "GEP"))
+    cited = {(f["n"], f["text"]) for c in result.chunks for f in c.footnotes}
+    assert len(prepared.notes.notes) == 32
+    assert cited == {(n.n, n.text) for n in prepared.notes.notes}

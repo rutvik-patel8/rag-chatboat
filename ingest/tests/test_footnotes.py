@@ -1,5 +1,5 @@
 from helpers import line_with, make_line, make_page
-from model import Line, Note, Span
+from model import Line, Note, Ref, Span
 from parse.footnotes import NoteIndex, note_number, split_notes, strip_markers
 from parse.pdf_text import body_font_size
 
@@ -55,14 +55,14 @@ def test_imac_marker_is_removed_and_recorded(imac_pages):
     page = strip_markers(split_notes(imac_pages[6], 8.5)[1])
     line = line_with(page, "iMac consumes")
     assert line.text == "on the market. iMac consumes 58 percent less energy than the requirement for ENERGY STAR."
-    assert line.refs == (18,)
+    assert line.refs == (Ref(7, 18, len(line.text)),)
 
 
 def test_gep_marker_is_removed_and_recorded(gep_pages):
     page = strip_markers(split_notes(gep_pages[40], 11.0)[1])
     line = line_with(page, "potential growth.")
     assert line.text == "potential growth. As exports ease, medium-term"
-    assert line.refs == (1,)
+    assert line.refs == (Ref(41, 1, len("potential growth.")),)
 
 
 def test_marker_lists_and_non_digit_superscripts():
@@ -71,7 +71,7 @@ def test_marker_lists_and_non_digit_superscripts():
     trademark = Span("TM", 5.0, 5, (70, 0, 80, 8))
     page = make_page(4, [Line((body, listed, trademark), (0, 0, 80, 10), 0)])
     [line] = strip_markers(page).lines
-    assert line.refs == (12, 13)
+    assert line.refs == (Ref(4, 12, 15), Ref(4, 13, 15))
     assert line.text == "Recycled cobaltTM"
 
 

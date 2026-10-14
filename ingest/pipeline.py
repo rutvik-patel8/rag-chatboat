@@ -75,14 +75,22 @@ def note_chunks(notes: list[Note], sections: list[SectionDraft]) -> list[ChunkDr
     ]
 
 
-def attach_footnotes(chunks: list[ChunkDraft], index: NoteIndex, report: Report) -> None:
+def attach_footnotes(chunks: list[ChunkDraft], index: NoteIndex, report: Report) -> dict[Note, str]:
+    """Resolve each (page, n) ref on its own page; returns each cited note's first citing section."""
+    unresolved = set(report.unresolved)
+    cited: dict[Note, str] = {}
     for chunk in chunks:
-        for n in chunk.refs:
-            note = index.resolve(n, chunk.page_start)
+        for page, n in chunk.refs:
+            note = index.resolve(n, page)
             if note is None:
-                report.unresolved.append((chunk.page_start, n))
-            else:
-                chunk.footnotes.append({"n": n, "text": note.text})
+                unresolved.add((page, n))
+                continue
+            entry = {"n": n, "text": note.text}
+            if entry not in chunk.footnotes:
+                chunk.footnotes.append(entry)
+            cited.setdefault(note, chunk.section_key)
+    report.unresolved = sorted(unresolved)
+    return cited
 
 
 def check_token_limit(texts: list[str], chunks: list[ChunkDraft]) -> None:

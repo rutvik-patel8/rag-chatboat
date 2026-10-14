@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 
-from model import Line, Note, Page
+from model import Line, Note, Page, Ref
 from parse.pdf_text import join_lines
 
 _NUMBER = re.compile(r"\d{1,3}")
@@ -53,11 +53,12 @@ def split_notes(page: Page, body_size: float, vocab: frozenset[str] = frozenset(
 def strip_markers(page: Page) -> Page:
     lines: list[Line] = []
     for line in page.lines:
-        refs: list[int] = []
+        refs: list[Ref] = []
         spans = []
         for span in line.spans:
             if span.is_superscript and _MARKER.fullmatch(span.text) and span.size < 0.85 * line.size:
-                refs.extend(int(n) for n in re.findall(r"\d+", span.text))
+                offset = len(re.sub(r"\s+", " ", "".join(s.text for s in spans)).strip())
+                refs.extend(Ref(page.number, int(n), offset) for n in re.findall(r"\d+", span.text))
             else:
                 spans.append(span)
         lines.append(replace(line, spans=tuple(spans), refs=tuple(refs)) if refs else line)

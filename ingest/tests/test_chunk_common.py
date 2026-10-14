@@ -1,5 +1,6 @@
 from chunk.common import Paragraph, build_embed_text, count_tokens, pack, paragraphs_from_pages, split_sentences
 from helpers import make_line, make_page
+from model import Ref
 from parse.boilerplate import find_boilerplate, strip_boilerplate
 
 
@@ -51,8 +52,11 @@ def test_block_change_size_change_and_gap_start_new_paragraphs():
 
 
 def test_paragraph_refs_are_unioned_in_order():
-    page = make_page(7, [make_line("iMac uses 58 percent less", y0=100, refs=(18,)), make_line("energy.", y0=112, refs=(18, 3))])
-    assert paragraphs_from_pages([page])[0].refs == (18, 3)
+    first = make_line("iMac uses 58 percent less", y0=100, refs=(Ref(7, 18, 25),))
+    second = make_line("energy.", y0=112, refs=(Ref(7, 3, 7),))
+    [paragraph] = paragraphs_from_pages([make_page(7, [first, second])])
+    assert paragraph.text == "iMac uses 58 percent less energy."
+    assert paragraph.refs == (Ref(7, 18, 25), Ref(7, 3, 33))
 
 
 def test_gpo_fact_stays_in_one_paragraph(gpo_pages):
@@ -95,8 +99,20 @@ def test_sentence_without_breaks_is_hard_split():
 
 
 def test_chunk_refs_union_paragraph_refs():
-    chunks = pack([Paragraph(ONE, 1, (18,)), Paragraph(TWO, 1, (7, 18))], 8, 0, count=words)
-    assert chunks[0].refs == (18, 7)
+    chunks = pack([Paragraph(ONE, 1, (Ref(1, 18, 15),)), Paragraph(TWO, 1, (Ref(1, 7, 15), Ref(1, 18, 4)))], 8, 0, count=words)
+    assert chunks[0].refs == ((1, 18), (1, 7))
+
+
+def test_refs_go_only_to_the_sentence_holding_the_marker():
+    text = "Alpha beta gamma. Delta epsilon zeta. Eta theta iota."
+    marker = Ref(1, 5, len("Alpha beta gamma. Delta epsilon zeta."))
+    chunks = pack([Paragraph(text, 1, (marker,))], 4, 0, count=words)
+    assert [c.refs for c in chunks] == [(), ((1, 5),), ()]
+
+
+def test_refs_keep_their_own_page_when_a_chunk_spans_pages():
+    chunks = pack([Paragraph(ONE, 42), Paragraph(TWO, 43, (Ref(43, 2, 15),))], 8, 0, count=words)
+    assert [(c.page_start, c.refs) for c in chunks] == [(42, ((43, 2),))]
 
 
 def test_embed_text_header_with_section_and_page_range():

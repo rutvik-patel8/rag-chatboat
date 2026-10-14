@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Callable
 
 import tiktoken
 
-from model import Page
+from model import Page, Ref
 from parse.pdf_text import join_lines, word_vocabulary
 
 
@@ -24,15 +24,25 @@ def count_tokens(text: str) -> int:
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])")
 
 
+def _sentence_spans(text: str) -> list[tuple[int, int]]:
+    spans, start = [], 0
+    for match in _SENTENCE_BREAK.finditer(text):
+        spans.append((start, match.start()))
+        start = match.end()
+    spans.append((start, len(text)))
+    return [(a, b) for a, b in spans if a < b]
+
+
 def split_sentences(text: str) -> list[str]:
-    return [s for s in _SENTENCE_BREAK.split(text.strip()) if s]
+    text = text.strip()
+    return [text[a:b] for a, b in _sentence_spans(text)]
 
 
 @dataclass(frozen=True)
 class Paragraph:
     text: str
     page: int
-    refs: tuple[int, ...] = ()
+    refs: tuple[Ref, ...] = ()  # offsets into `text`
 
 
 def paragraphs_from_pages(pages: list[Page], vocab: frozenset[str] | None = None) -> list[Paragraph]:
@@ -56,8 +66,8 @@ def paragraphs_from_pages(pages: list[Page], vocab: frozenset[str] | None = None
                     out.append(Paragraph(text, page.number, tuple(refs)))
                 text, refs = line.text, list(line.refs)
             else:
-                text = join_lines(text, line.text, vocab)[0]
-                refs += [r for r in line.refs if r not in refs]
+                text, start = join_lines(text, line.text, vocab)
+                refs += [replace(r, offset=start + r.offset) for r in line.refs]
             previous = line
         if text is not None:
             out.append(Paragraph(text, page.number, tuple(refs)))
@@ -69,7 +79,7 @@ class Packed:
     text: str
     page_start: int
     page_end: int
-    refs: tuple[int, ...]
+    refs: tuple[tuple[int, int], ...]  # (page, n)
 
 
 @dataclass(frozen=True)
@@ -77,33 +87,43 @@ class _Unit:
     paragraph: int
     text: str
     page: int
-    refs: tuple[int, ...]
+    refs: tuple[Ref, ...]
     tokens: int
 
 
-def _hard_split(text: str, target: int, count: Callable[[str], int]) -> list[str]:
-    pieces, current = [], []
-    for word in text.split():
-        if current and count(" ".join(current + [word])) > target:
-            pieces.append(" ".join(current))
-            current = []
-        current.append(word)
-    if current:
-        pieces.append(" ".join(current))
+def _hard_split_spans(text: str, target: int, count: Callable[[str], int]) -> list[tuple[int, int]]:
+    pieces: list[tuple[int, int]] = []
+    first = last = None
+    for word in re.finditer(r"\S+", text):
+        if first is not None and count(text[first : word.end()]) > target:
+            pieces.append((first, last))
+            first = None
+        if first is None:
+            first = word.start()
+        last = word.end()
+    if first is not None:
+        pieces.append((first, last))
     return pieces
 
 
 def _units(paragraphs: list[Paragraph], target: int, count: Callable[[str], int]) -> list[_Unit]:
+    """Paragraphs, or their sentences/word runs when too long. A marker goes only to the piece holding it."""
     units = []
     for index, paragraph in enumerate(paragraphs):
-        tokens = count(paragraph.text)
+        text = paragraph.text
+        tokens = count(text)
         if tokens <= target:
-            units.append(_Unit(index, paragraph.text, paragraph.page, paragraph.refs, tokens))
+            units.append(_Unit(index, text, paragraph.page, paragraph.refs, tokens))
             continue
-        for sentence in split_sentences(paragraph.text):
-            pieces = [sentence] if count(sentence) <= target else _hard_split(sentence, target, count)
-            for piece in pieces:
-                units.append(_Unit(index, piece, paragraph.page, paragraph.refs, count(piece)))
+        for s_start, s_end in _sentence_spans(text):
+            sentence = text[s_start:s_end]
+            if count(sentence) <= target:
+                pieces = [(s_start, s_end)]
+            else:
+                pieces = [(s_start + a, s_start + b) for a, b in _hard_split_spans(sentence, target, count)]
+            for a, b in pieces:
+                refs = tuple(r for r in paragraph.refs if a <= r.offset <= b)
+                units.append(_Unit(index, text[a:b], paragraph.page, refs, count(text[a:b])))
     return units
 
 
@@ -111,9 +131,9 @@ def _join(units: list[_Unit]) -> Packed:
     text = units[0].text
     for previous, unit in zip(units, units[1:]):
         text += (" " if unit.paragraph == previous.paragraph else "\n\n") + unit.text
-    refs: list[int] = []
+    refs: list[tuple[int, int]] = []
     for unit in units:
-        refs += [r for r in unit.refs if r not in refs]
+        refs += [(r.page, r.n) for r in unit.refs if (r.page, r.n) not in refs]
     return Packed(text, min(u.page for u in units), max(u.page for u in units), tuple(refs))
 
 
