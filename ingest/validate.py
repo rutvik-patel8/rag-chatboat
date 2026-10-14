@@ -10,6 +10,7 @@ import psycopg
 
 from config import Settings, load_settings
 from db import connect
+from profiles import DOCS
 
 
 @dataclass
@@ -47,15 +48,19 @@ def generic_checks(conn: psycopg.Connection, settings: Settings, slug: str) -> l
     ]
 
 
+def slugs_to_check(requested: list[str] | None) -> list[str]:
+    """Every known document by default, so one that was never ingested fails instead of being skipped."""
+    return requested or list(DOCS)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check ingested documents.")
-    parser.add_argument("--doc", dest="docs", action="append", help="slug to check (default: every stored document)")
+    parser.add_argument("--doc", dest="docs", action="append", help="slug to check (default: gpo, gep, imac)")
     args = parser.parse_args(argv)
     settings = load_settings()
     ok = True
     with connect(settings) as conn:
-        slugs = args.docs or [row[0] for row in conn.execute("SELECT slug FROM documents ORDER BY slug")]
-        for slug in slugs:
+        for slug in slugs_to_check(args.docs):
             results = generic_checks(conn, settings, slug) + [check(conn) for check in DOC_CHECKS.get(slug, [])]
             for r in results:
                 print(f"{'✓' if r.ok else '✗'} {slug}: {r.name} — {r.detail}")

@@ -44,3 +44,11 @@ def test_empty_chunk_content_is_reported(conn):
     conn.commit()
     failed = [r.name for r in generic_checks(conn, load_settings(), "test-validate") if not r.ok]
     assert failed == ["no empty chunks"]
+
+
+def test_default_checks_every_known_document_and_missing_ones_fail(conn):
+    from validate import main, slugs_to_check
+
+    assert slugs_to_check(None) == ["gpo", "gep", "imac"]
+    assert main(["--doc", "test-missing"]) == 1
+    assert main(["--doc", "test-validate"]) == 0
