@@ -19,7 +19,10 @@ describe("evaluateSchema", () => {
 
   it("reports a column dimension that differs from EMBED_DIM", () => {
     const [problem] = evaluateSchema({ vectorType: "vector(1536)", documents: [] }, expected);
-    expect(problem).toBe("chunks.embedding is vector(1536) but EMBED_DIM is 768; run db/reset.sh");
+    expect(problem).toBe(
+      "chunks.embedding is vector(1536) but EMBED_DIM is 768: set EMBED_DIM=1536 in .env, " +
+        "or change vector(1536) in db/schema.sql to vector(768) and run db/reset.sh (deletes all data)",
+    );
   });
 
   it("reports documents ingested with a different embedding model or dimension", () => {

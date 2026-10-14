@@ -13,7 +13,12 @@ export function evaluateSchema(facts: SchemaFacts, expected: ExpectedEmbedding):
   if (facts.vectorType === null) {
     problems.push("chunks.embedding not found; apply db/schema.sql with db/reset.sh");
   } else if (facts.vectorType !== `vector(${expected.embedDim})`) {
-    problems.push(`chunks.embedding is ${facts.vectorType} but EMBED_DIM is ${expected.embedDim}; run db/reset.sh`);
+    const columnDim = facts.vectorType.match(/^vector\((\d+)\)$/)?.[1] ?? "?";
+    problems.push(
+      `chunks.embedding is ${facts.vectorType} but EMBED_DIM is ${expected.embedDim}: ` +
+        `set EMBED_DIM=${columnDim} in .env, or change ${facts.vectorType} in db/schema.sql to ` +
+        `vector(${expected.embedDim}) and run db/reset.sh (deletes all data)`,
+    );
   }
   for (const doc of facts.documents) {
     if (doc.embed_model !== expected.embedModel || doc.embed_dim !== expected.embedDim) {

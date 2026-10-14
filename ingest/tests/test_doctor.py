@@ -31,11 +31,13 @@ def test_database_unreachable_is_reported_not_raised():
     assert check.detail == "Database check failed: connection refused"
 
 
-def test_dimension_mismatch_points_to_reset():
+def test_dimension_mismatch_offers_both_fixes_and_warns_reset_deletes_data():
     check = check_database(SETTINGS, connect_fn=fake_connect, dim_fn=lambda _c: 1536)
     assert not check.ok
-    assert "vector(1536)" in check.detail and "EMBED_DIM is 768" in check.detail
-    assert "db/reset.sh" in check.detail
+    assert check.detail == (
+        "chunks.embedding is vector(1536) but EMBED_DIM is 768: set EMBED_DIM=1536 in .env, "
+        "or change vector(1536) in db/schema.sql to vector(768) and run db/reset.sh (deletes all data)"
+    )
 
 
 class FakeEmbedder:
