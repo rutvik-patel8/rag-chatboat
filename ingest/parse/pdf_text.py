@@ -44,7 +44,7 @@ def load_pages(pdf_path: Path | str) -> list[Page]:
                 for raw in block["lines"]:
                     texts = [(_span_text(s), s) for s in raw["spans"]]
                     spans = tuple(
-                        Span(normalize(text), round(s["size"], 2), s["flags"], tuple(s["bbox"]))
+                        Span(normalize(text), round(s["size"], 2), s["flags"], tuple(s["bbox"]), s["font"], s["color"])
                         for text, s in texts
                         if text
                     )
