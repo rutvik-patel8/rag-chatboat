@@ -29,7 +29,9 @@ def check_database(settings: Settings, connect_fn=connect, dim_fn=embedding_colu
         return Check(
             "database",
             False,
-            f"chunks.embedding is vector({dim}) but EMBED_DIM is {settings.embed_dim}; run db/reset.sh",
+            f"chunks.embedding is vector({dim}) but EMBED_DIM is {settings.embed_dim}: "
+            f"set EMBED_DIM={dim} in .env, or change vector({dim}) in db/schema.sql to "
+            f"vector({settings.embed_dim}) and run db/reset.sh (deletes all data)",
         )
     return Check("database", True, f"schema ok, chunks.embedding is vector({dim})")
 

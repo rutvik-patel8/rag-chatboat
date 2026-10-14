@@ -10,10 +10,11 @@ Design: `docs/superpowers/specs/2026-10-14-rag-chatbot-design.md`.
    ```bash
    docker compose up -d --wait db
    ```
-3. Changed `db/schema.sql` or `EMBED_DIM`? Wipe and re-create the DB (deletes all data):
+3. Changed `db/schema.sql`? Wipe and re-create the DB (deletes all data):
    ```bash
    db/reset.sh
    ```
+   `EMBED_DIM` in `.env` must equal the `vector(N)` size in `db/schema.sql`; to change it, edit both, then run `db/reset.sh`.
 
 ## Ingestion (Python)
 
