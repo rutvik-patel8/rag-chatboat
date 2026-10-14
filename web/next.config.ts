@@ -1,10 +1,6 @@
-import path from "node:path";
-import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
-// One .env at the repo root is shared with the Python ingestion side.
-loadEnvConfig(path.resolve(process.cwd(), ".."));
-
+// Env: web/.env is a symlink to the repo-root .env shared with the Python ingestion side.
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
