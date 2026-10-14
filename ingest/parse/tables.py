@@ -78,3 +78,17 @@ def split_table(rows: list[list[str]], header_rows: int, max_tokens: int, count:
 
 def remove_region(page: Page, bbox: BBox) -> Page:
     return replace(page, lines=tuple(line for line in page.lines if not _inside(line.bbox, bbox)))
+
+
+def merge_symbol_cells(rows: list[list[str]], symbols: tuple[str, ...] = ("$",)) -> list[list[str]]:
+    """Join a lone currency-symbol cell to the value after it: ["$", "644,807"] → ["$644,807"]."""
+    merged = []
+    for row in rows:
+        out: list[str] = []
+        for cell in row:
+            if out and out[-1] in symbols:
+                out[-1] += cell
+            else:
+                out.append(cell)
+        merged.append(out)
+    return merged

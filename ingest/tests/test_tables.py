@@ -55,3 +55,10 @@ def test_split_table_never_splits_a_row_even_when_it_is_too_big():
 def test_remove_region_drops_only_lines_inside_the_box():
     page = make_page(1, [make_line("caption", y0=90), make_line("cell", y0=200), make_line("after", y0=400)])
     assert [l.text for l in remove_region(page, (0, 150, 600, 300)).lines] == ["caption", "after"]
+
+
+def test_lone_dollar_cells_join_the_value_after_them():
+    from parse.tables import merge_symbol_cells
+
+    rows = [["Fund balance with Treasury (Note 2)", "$", "644,807", "$", "585,883"], ["Inventory", "57,369"]]
+    assert merge_symbol_cells(rows) == [["Fund balance with Treasury (Note 2)", "$644,807", "$585,883"], ["Inventory", "57,369"]]

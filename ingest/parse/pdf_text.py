@@ -80,6 +80,8 @@ def join_lines(left: str, right: str, vocab: frozenset[str]) -> tuple[str, int]:
     A line-end hyphen is dropped only when the joined word appears elsewhere in the document
     ("house-" + "holds" → "households"); otherwise it is a real compound ("middle-income").
     """
+    if left.endswith("-") and left[-2:-1].isdigit() and right[:1].isdigit():
+        return left + right, len(left)  # "Public Law 103-" + "40" → "103-40"
     hyphen = _TRAILING_HYPHEN.search(left)
     word = _LEADING_WORD.match(right)
     if hyphen and right[:1].islower():

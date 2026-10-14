@@ -67,3 +67,9 @@ def test_word_vocabulary_is_lowercase_letters_only(imac_pages):
 def test_spans_carry_font_and_colour(gpo_pages):
     span = line_with(gpo_pages[10], "GPO and Congress").spans[0]
     assert (span.font, round(span.size, 1), span.color) == ("HelveticaNeueLTStd-Md", 10.0, 0x646E74)
+
+
+def test_join_lines_keeps_number_ranges_together():
+    from parse.pdf_text import join_lines
+
+    assert join_lines("under Public Law 103-", "40, GPO has", frozenset()) == ("under Public Law 103-40, GPO has", 21)
