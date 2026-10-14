@@ -5,6 +5,7 @@ import re
 from dataclasses import replace
 
 from model import Line, Note, Page
+from parse.pdf_text import join_lines
 
 _NUMBER = re.compile(r"\d{1,3}")
 _MARKER = re.compile(r"\s*\d{1,3}(?:\s*,\s*\d{1,3})*\s*")
@@ -21,7 +22,7 @@ def note_number(line: Line) -> int | None:
     return None
 
 
-def split_notes(page: Page, body_size: float) -> tuple[list[Note], Page]:
+def split_notes(page: Page, body_size: float, vocab: frozenset[str] = frozenset()) -> tuple[list[Note], Page]:
     found: list[dict] = []
     keep: list[Line] = []
     current: dict | None = None
@@ -31,7 +32,7 @@ def split_notes(page: Page, body_size: float) -> tuple[list[Note], Page]:
             spans = [span for span in line.spans if span.text.strip()][1:]
             current = {
                 "n": n,
-                "parts": [re.sub(r"\s+", " ", "".join(span.text for span in spans)).strip()],
+                "text": re.sub(r"\s+", " ", "".join(span.text for span in spans)).strip(),
                 "size": line.size,
                 "bottom": line.bbox[3],
             }
@@ -39,13 +40,13 @@ def split_notes(page: Page, body_size: float) -> tuple[list[Note], Page]:
             continue
         gap = line.bbox[1] - current["bottom"] if current else None
         if current and abs(line.size - current["size"]) < 0.3 and -current["size"] <= gap < 1.5 * current["size"]:
-            current["parts"].append(line.text)
+            current["text"] = join_lines(current["text"], line.text, vocab)[0]
             current["bottom"] = line.bbox[3]
             continue
         if line.size >= body_size:
             current = None
         keep.append(line)
-    notes = [Note(item["n"], page.number, " ".join(item["parts"])) for item in found]
+    notes = [Note(item["n"], page.number, item["text"]) for item in found]
     return notes, replace(page, lines=tuple(keep))
 
 

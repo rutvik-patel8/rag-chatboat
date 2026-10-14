@@ -86,3 +86,10 @@ def test_unmatched_marker_is_unresolved_not_guessed():
     index = NoteIndex([Note(2, 43, "an unrelated page footnote")])
     assert index.resolve(2, 26) is None  # e.g. a GEP table-note marker on p26
     assert index.resolve(9, 43) is None
+
+
+def test_note_lines_keep_compound_hyphens(gep_pages):
+    import re
+
+    texts = [n.text for n in notes_of(gep_pages, range(1, 201))]
+    assert not [t for t in texts if re.search(r"[a-z]- [a-z]", t)]

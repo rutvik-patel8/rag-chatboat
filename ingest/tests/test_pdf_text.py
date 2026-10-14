@@ -45,3 +45,20 @@ def test_th_ligature_glyph_is_repaired(gep_pages):
     words = [w for page in gep_pages for line in page.lines for w in line.text.split()]
     assert "These" in words and "Third," in words
     assert not {"Tese", "Tey", "Teir", "Tere", "Tird"} & set(words)
+
+
+def test_join_lines_drops_hyphen_only_for_known_words():
+    from parse.pdf_text import join_lines
+
+    vocab = frozenset({"households"})
+    assert join_lines("prices to house-", "holds this year", vocab) == ("prices to households this year", 15)
+    assert join_lines("most middle-", "income countries", vocab) == ("most middle-income countries", 12)
+    assert join_lines("growth slowed", "in 2025", vocab) == ("growth slowed in 2025", 14)
+
+
+def test_word_vocabulary_is_lowercase_letters_only(imac_pages):
+    from parse.pdf_text import word_vocabulary
+
+    vocab = word_vocabulary(imac_pages)
+    assert {"recycled", "aluminum", "energy"} <= vocab
+    assert not any(ch.isdigit() or ch.isupper() for word in vocab for ch in word)

@@ -1,6 +1,7 @@
 """Load a PDF into Page/Line/Span records with normalized text."""
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections import Counter
 from pathlib import Path
@@ -61,3 +62,28 @@ def body_font_size(pages: list[Page]) -> float:
             for span in line.spans:
                 sizes[round(span.size, 1)] += len(span.text.strip())
     return sizes.most_common(1)[0][0]
+
+
+_WORD = re.compile(r"[^\W\d_]+")
+_TRAILING_HYPHEN = re.compile(r"([^\W\d_]+)-$")
+_LEADING_WORD = re.compile(r"[^\W\d_]+")
+
+
+def word_vocabulary(pages: list[Page]) -> frozenset[str]:
+    """Lower-case words seen anywhere in the document, used to decide line-end hyphens."""
+    return frozenset(w.lower() for page in pages for line in page.lines for w in _WORD.findall(line.text))
+
+
+def join_lines(left: str, right: str, vocab: frozenset[str]) -> tuple[str, int]:
+    """Join two wrapped lines; returns the text and the offset where `right` starts.
+
+    A line-end hyphen is dropped only when the joined word appears elsewhere in the document
+    ("house-" + "holds" → "households"); otherwise it is a real compound ("middle-income").
+    """
+    hyphen = _TRAILING_HYPHEN.search(left)
+    word = _LEADING_WORD.match(right)
+    if hyphen and right[:1].islower():
+        if word and (hyphen.group(1) + word.group(0)).lower() in vocab:
+            return left[:-1] + right, len(left) - 1
+        return left + right, len(left)
+    return f"{left} {right}", len(left) + 1

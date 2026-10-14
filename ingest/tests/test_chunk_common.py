@@ -21,7 +21,20 @@ def test_split_sentences():
 
 def test_lines_in_one_block_join_and_hyphenation_is_repaired():
     page = make_page(3, [make_line("Caps on prices limit pass-through to house-", y0=100), make_line("holds this year.", y0=112)])
-    assert paragraphs_from_pages([page]) == [Paragraph("Caps on prices limit pass-through to households this year.", 3)]
+    assert paragraphs_from_pages([page], frozenset({"households"})) == [
+        Paragraph("Caps on prices limit pass-through to households this year.", 3)
+    ]
+
+
+def test_compound_words_keep_their_hyphen_across_lines():
+    page = make_page(3, [make_line("most middle-", y0=100), make_line("income countries", y0=112)])
+    assert paragraphs_from_pages([page], frozenset()) == [Paragraph("most middle-income countries", 3)]
+
+
+def test_gep_compound_words_survive(gep_pages):
+    pages = strip_boilerplate(gep_pages, find_boilerplate(gep_pages))
+    text = " ".join(p.text for p in paragraphs_from_pages(pages)).lower()
+    assert "middle-income" in text and "middleincome" not in text
 
 
 def test_block_change_size_change_and_gap_start_new_paragraphs():

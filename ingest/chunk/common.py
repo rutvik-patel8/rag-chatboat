@@ -9,6 +9,7 @@ from typing import Callable
 import tiktoken
 
 from model import Page
+from parse.pdf_text import join_lines, word_vocabulary
 
 
 @lru_cache(maxsize=1)
@@ -34,8 +35,10 @@ class Paragraph:
     refs: tuple[int, ...] = ()
 
 
-def paragraphs_from_pages(pages: list[Page]) -> list[Paragraph]:
+def paragraphs_from_pages(pages: list[Page], vocab: frozenset[str] | None = None) -> list[Paragraph]:
     """A new paragraph starts on a new block, a font-size change, or a vertical gap."""
+    if vocab is None:
+        vocab = word_vocabulary(pages)
     out: list[Paragraph] = []
     for page in pages:
         text, refs, previous = None, [], None
@@ -53,10 +56,7 @@ def paragraphs_from_pages(pages: list[Page]) -> list[Paragraph]:
                     out.append(Paragraph(text, page.number, tuple(refs)))
                 text, refs = line.text, list(line.refs)
             else:
-                if text.endswith("-") and line.text[:1].islower():
-                    text = text[:-1] + line.text
-                else:
-                    text = f"{text} {line.text}"
+                text = join_lines(text, line.text, vocab)[0]
                 refs += [r for r in line.refs if r not in refs]
             previous = line
         if text is not None:
