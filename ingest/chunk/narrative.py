@@ -22,6 +22,8 @@ OVERLAP_TOKENS = 75
 TABLE_TOKENS = 450
 
 _BOLD = re.compile(r"Bold", re.I)
+# Faces of the real financial headings; the OIG memo (Cambria/Calibri Bold, p51–52) uses others for its labels.
+_FINANCIAL_HEADING_FACES = ("Arial-Bold", "TimesNewRomanPS-Bold")
 _NUMERIC = re.compile(r"[\d$,.()\s%-]+")
 
 
@@ -104,7 +106,8 @@ def standalone(line: Line, page: Page) -> bool:
 
 def _financial_candidate(line: Line, page: Page) -> bool:
     return (
-        is_bold(line)
+        all(s.font.startswith(_FINANCIAL_HEADING_FACES) for s in _visible(line))
+        and is_bold(line)
         and 11.5 <= line.size <= 14.5
         and len(line.text) < 90
         and not _NUMERIC.fullmatch(line.text)

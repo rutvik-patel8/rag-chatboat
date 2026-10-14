@@ -102,3 +102,9 @@ def test_financial_footer_and_page_numbers_are_stripped(built):
         line for c in result.chunks if c.kind == "table" for line in c.content.splitlines() if re.fullmatch(r"\| \d+ \|(\s+\|)*", line)
     ]
     assert lone_numbers == []
+
+
+def test_oig_memo_and_letter_spaced_cover_open_no_sections(built):
+    titles = {s.title for s in built[0].sections}
+    assert not {"Date", "To", "From", "U.S. GOVERNMENT PUBLISHING OFFICE"} & titles
+    assert not [t for t in titles if t.startswith("A U D I T")]

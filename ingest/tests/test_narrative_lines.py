@@ -66,3 +66,10 @@ def test_page_top_title_moves_before_body_listed_first():
     page = make_page(4, [make_line("Body below the title", y0=100), make_line("Title", y0=50), make_line("Lower title", y0=300)])
     moved = hoist_page_title(page, lambda l: l.text in {"Title", "Lower title"})
     assert [l.text for l in moved.lines] == ["Title", "Body below the title", "Lower title"]
+
+
+def test_memo_labels_in_other_faces_are_not_headings(gpo_prepared):
+    p52 = page_of(gpo_prepared.pages, 52)
+    for label in ("Date", "To", "From"):
+        line = next(l for l in p52.lines if l.text == label)
+        assert financial_heading(line, p52, set()) is None, label
