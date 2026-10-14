@@ -39,3 +39,9 @@ def test_body_font_size(request, fixture, expected):
 def test_superscript_marker_survives_loading(imac_pages):
     line = line_with(imac_pages[6], "iMac consumes")
     assert [s.text for s in line.spans if s.is_superscript] == ["18"]
+
+
+def test_th_ligature_glyph_is_repaired(gep_pages):
+    words = [w for page in gep_pages for line in page.lines for w in line.text.split()]
+    assert "These" in words and "Third," in words
+    assert not {"Tese", "Tey", "Teir", "Tere", "Tird"} & set(words)
