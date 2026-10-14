@@ -14,7 +14,7 @@ from typing import Callable
 from chunk.common import count_tokens, pack, paragraphs_from_pages
 from model import ChunkDraft, Line, Page, SectionDraft, Span
 from parse.boilerplate import find_boilerplate, in_margin, strip_boilerplate
-from parse.tables import merge_symbol_cells, region_rows, split_table
+from parse.tables import merge_symbol_cells, pad_numeric_rows, region_rows, split_table
 from pipeline import BuildResult, DocSpec, Prepared
 
 TARGET_TOKENS = 500
@@ -263,7 +263,7 @@ def build(spec: DocSpec, prepared: Prepared, layout: NarrativeLayout = GPO_LAYOU
         for caption in paragraphs_from_pages(pseudo_pages(captions[section.key]), vocab):
             chunks.append(ChunkDraft(section.key, "caption", caption.text, caption.page, caption.page))
     for key, page_no, lines, page in tables:
-        rows = merge_symbol_cells(region_rows(replace(page, lines=tuple(lines)), (0, 0, page.width, page.height)))
+        rows = pad_numeric_rows(merge_symbol_cells(region_rows(replace(page, lines=tuple(lines)), (0, 0, page.width, page.height))))
         header_rows = next((i + 1 for i, row in enumerate(rows) if "2018" in row), 1)
         for piece in split_table(rows, header_rows, TABLE_TOKENS, count_tokens):
             chunks.append(ChunkDraft(key, "table", piece, page_no, page_no))

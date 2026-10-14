@@ -92,3 +92,15 @@ def merge_symbol_cells(rows: list[list[str]], symbols: tuple[str, ...] = ("$",))
                 out.append(cell)
         merged.append(out)
     return merged
+
+
+_NUMERIC_CELL = re.compile(r"[\d$,.()%-]+")
+
+
+def pad_numeric_rows(rows: list[list[str]]) -> list[list[str]]:
+    """A short row of only numbers (a "2018 | 2017" header) belongs over the right-hand value columns."""
+    width = max((len(row) for row in rows), default=0)
+    return [
+        [""] * (width - len(row)) + row if len(row) < width and all(_NUMERIC_CELL.fullmatch(c) for c in row) else row
+        for row in rows
+    ]

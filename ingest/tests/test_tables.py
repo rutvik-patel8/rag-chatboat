@@ -62,3 +62,10 @@ def test_lone_dollar_cells_join_the_value_after_them():
 
     rows = [["Fund balance with Treasury (Note 2)", "$", "644,807", "$", "585,883"], ["Inventory", "57,369"]]
     assert merge_symbol_cells(rows) == [["Fund balance with Treasury (Note 2)", "$644,807", "$585,883"], ["Inventory", "57,369"]]
+
+
+def test_short_numeric_header_rows_align_right():
+    from parse.tables import pad_numeric_rows
+
+    rows = [["(Dollars in Thousands)"], ["2018", "2017"], ["Inventory", "57,369", "52,984"]]
+    assert pad_numeric_rows(rows) == [["(Dollars in Thousands)"], ["", "2018", "2017"], ["Inventory", "57,369", "52,984"]]

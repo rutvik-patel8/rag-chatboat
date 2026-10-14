@@ -108,3 +108,8 @@ def test_oig_memo_and_letter_spaced_cover_open_no_sections(built):
     titles = {s.title for s in built[0].sections}
     assert not {"Date", "To", "From", "U.S. GOVERNMENT PUBLISHING OFFICE"} & titles
     assert not [t for t in titles if t.startswith("A U D I T")]
+
+
+def test_statement_year_header_sits_over_the_value_columns(built):
+    tables = [c.content for c in built[0].chunks if c.kind == "table" and c.page_start >= 58]
+    assert tables and all("\n|  | 2018 | 2017 |\n" in t for t in tables)
