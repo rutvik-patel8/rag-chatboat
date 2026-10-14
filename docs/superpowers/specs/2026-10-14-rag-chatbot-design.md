@@ -166,9 +166,16 @@ CREATE INDEX chunks_doc_section    ON chunks (doc_id, section_id, seq);
 
 ### 5.2 GPO — `narrative` profile
 
-- Headings: font size ≥ body size + 2pt or bold standalone line → starts a new flat section.
-- Chunks: ~500 tokens target, ~75 overlap, split at paragraph then sentence boundaries; never cross a heading.
-- Photo captions matching `^\((Above|Below|Left|Right|Top|Bottom)[^)]*\)` are split out as `kind=caption`.
+Probing showed GPO marks headings by **font face and colour, not size** (narrative body is Garamond Light 9.8pt; the computed body size is 12pt only because of the financial half), so the rules are style-based:
+
+- **Skipped pages:** 1, 31–33 (covers and the statements' contents page).
+- **Narrative pages (≤ 30):** level 1 = HelveticaNeue Medium 10pt grey `#646e74` ("GPO and Congress"); level 2 = HelveticaNeue Medium 9.5pt blue `#507cbf`, standalone or **run-in** (the heading starts a body line; the rest of the line stays body text). The same face in dark grey `#404041` is inline emphasis/URLs and in teal `#4e89a8` chart titles — neither is a heading.
+- **Financial pages (≥ 34):** level 1 = lines ≥ 20pt (divider pages "SECTION I" + "MANAGEMENT DISCUSSION AND ANALYSIS (UNAUDITED)"); level 2 = bold face, 11.5–14.5pt, < 90 chars, not numeric, not ending in ":", **alone on its row** (rules out bold table labels and memo fields), and not a title-block line repeated on ≥ 3 pages ("U.S. Government Publishing Office").
+- **Titles:** level-1 lines on one page, and vertically adjacent level-2 lines, merge into one title. A page-top title that PDF order places after body text is moved first. Where the PDF has no heading, the profile injects one: p2 "Letter of Transmittal", p7 "About GPO"; the p14 infographic gets its own one-page section "GPO By the Numbers FY 2018".
+- **Sections:** root → level 1 → level 2, path `"<L1> › <L2>"`. Text chunks ~500 tokens, ~75 overlap, packed per section — never across a heading.
+- **Captions:** HelveticaNeue Roman 8.2pt lines on narrative pages → `kind=caption` chunks, kept out of text chunks.
+- **Drop caps:** a one-letter line ≥ 3× body size rejoins the line it starts ("T" + "he U.S. Government…").
+- **Tables:** pages 14, 58, 59, 60 → row reconstruction over the page (heading, margin and repeated title lines excluded), lone `$` cells merged with their value, header = rows through the `2018 | 2017` row, split at ≤ 450 tokens with the header repeated.
 - No routing hints, no summaries — this is the control case.
 
 ### 5.3 GEP — `hierarchical` profile
@@ -289,7 +296,7 @@ Per question: **retrieval hit** (an expected page/section among final sources) �
 ## 9. Testing
 
 - **Python (pytest, offline)** — footnote linking (iMac p7 marker 18 → note 18 text) · boilerplate stripping · GEP Contents parsing and page-offset mapping (`Risks to the outlook` → PDF p52) · chunker invariants (no chunk crosses a section; size bounds; tables never split mid-row) · vision cross-check using fixture JSON · number normalization.
-- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106 · iMac has table chunks containing `0.59W` and `45%` · GPO chunks contain `govinfo` · every chunk has a non-empty embedding of `EMBED_DIM`.
+- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106 · iMac has table chunks containing `0.59W` and `45%` · GPO: the three brief facts sit in the expected chunks (166 libraries; govinfo deployment in the Acting Deputy Director's message; "$375 million" in text and "$375.7 million" in the By-the-Numbers table), a `› govinfo` section exists, ≥ 15 caption and ≥ 4 table chunks · every chunk has a non-empty embedding of `EMBED_DIM`.
 - **TypeScript (vitest)** — router regexes · RRF fusion · number normalization and verifier · prompt/context assembly · one SQL integration test against the Docker DB.
 - **End-to-end** — the eval scorecard (§8) is the acceptance test.
 
