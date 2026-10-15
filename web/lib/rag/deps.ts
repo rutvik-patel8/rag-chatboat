@@ -9,7 +9,17 @@ import { rerank } from "@/lib/rag/rerank";
 import { hybridSearch, loadCatalog } from "@/lib/rag/retrieve";
 import type { Catalog } from "@/lib/rag/router";
 
-let catalog: Promise<Catalog> | undefined;
+/** Load the catalog once; a failed or empty load (DB down, nothing ingested yet) is retried on the next request. */
+export function memoCatalog(load: () => Promise<Catalog>): () => Promise<Catalog> {
+  let cached: Promise<Catalog> | undefined;
+  return () => {
+    const pending = (cached ??= load());
+    pending.then((c) => { if (!Object.keys(c).length) cached = undefined; }, () => { cached = undefined; });
+    return pending;
+  };
+}
+
+const catalog = memoCatalog(() => loadCatalog(getPool()));
 
 /** Production wiring: Postgres, Gemini embeddings, the utility model for helpers and the chat model for answers. */
 export function productionDeps(): Deps {
@@ -17,7 +27,7 @@ export function productionDeps(): Deps {
   const client = getGenAI() as unknown as GenClient;
   const helper = utilityModel(env);
   return {
-    catalog: () => (catalog ??= loadCatalog(getPool())),
+    catalog,
     condense: async (history, question) => {
       if (!history.length) return question;
       try {
