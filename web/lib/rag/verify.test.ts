@@ -40,3 +40,11 @@ describe("verifyAnswer on a refusal", () => {
     expect(verifyAnswer("I couldn't find this in the documents.", [{ id: 1, label: "[S1] GEP", text: "Growth 6.3" }])).toEqual([]);
   });
 });
+
+describe("verifyAnswer with grouped citations", () => {
+  it("reads [S1, S2] as citing both sources", () => {
+    const sources = [{ id: 1, label: "[S1] GEP", text: "Growth 4.2" }, { id: 2, label: "[S2] GEP", text: "China 4.4" }];
+    expect(verifyAnswer("EAP 4.2 and China 4.4 [S1, S2].", sources)).toEqual([]);
+    expect(verifyAnswer("China 4.4 [S1; S3].", sources)).toEqual(["cites unknown sources: S3", "unverified figures: 4.4"]);
+  });
+});
