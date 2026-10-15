@@ -46,3 +46,14 @@ describe("SourcesDrawer", () => {
     expect(html).toContain("Stand: 100 percent recycled aluminum.");
   });
 });
+
+describe("Chat", () => {
+  it("starts with the document selector, the retrieval toggle and the brief's questions", async () => {
+    const { Chat, EXAMPLES } = await import("@/components/Chat");
+    const html = renderToStaticMarkup(<Chat />);
+    for (const label of ["All documents", "GPO 2018", "World Bank GEP", "iMac report", "Show retrieval"]) expect(html).toContain(label);
+    expect(html).toContain('aria-checked="true"');
+    EXAMPLES.all.forEach((q) => expect(html).toContain(q.replace(/'/g, "&#x27;")));
+    expect(Object.values(EXAMPLES).flat()).toHaveLength(12);
+  });
+});
