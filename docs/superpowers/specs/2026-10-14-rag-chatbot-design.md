@@ -94,9 +94,10 @@ rag-chatboat/
 │   ├── app/api/chat/route.ts
 │   ├── app/api/pdf/[slug]/route.ts   serves PDFs for "open page" links
 │   └── lib/rag/  condense.ts · router.ts · retrieve.ts · rerank.ts · context.ts · prompt.ts · verify.ts · gemini.ts · db.ts · numbers.ts
+├── web/lib/eval/ · web/scripts/eval.ts   evaluation runner (`npm run eval`, run with tsx)
 └── eval/
     ├── questions.yaml
-    └── run_eval.ts
+    └── results/                  run outputs (git-ignored)
 ```
 
 ## 4. Data model (`db/schema.sql`)
@@ -275,23 +276,35 @@ Request (zod-validated): `{ question: string (≤ 1000 chars), scope: "gpo"|"gep
 
 ### 8.1 Question set (`eval/questions.yaml`)
 
-Each entry: `{id, question, scope, type: brief|coverage|trap|isolation, must_contain[], expected_pages[], expected_section?, rubric?[]}`. `must_contain` and `rubric` values are taken from the actual source pages during implementation — never written from memory.
+Each entry: `{id, question, scope, type: brief|coverage|trap|isolation, must_contain[], must_not_contain?[], expected_pages[], expected_section?, rubric?[]}`. Pages are PDF page numbers; `"107-138"` is an inclusive range. `must_contain` and `rubric` values are taken from the actual source pages during implementation — never written from memory.
 
 - **Brief (9)**
   - GPO: depository libraries visited in FY 2018 · system that replaced FDsys and when fully deployed · printing procured for agencies in FY 2018.
   - GEP: South Asia growth outlook · Chapter 3 on sovereign debt in developing economies · Executive Summary main risks.
   - iMac: energy use vs ENERGY STAR requirement · total carbon footprint and use vs manufacturing share · stand material and recycled percentage.
-- **Coverage (4)** — iMac sleep power at 230V (`0.59W`, table in endnote 18) · iMac carbon split (`50%`, `45%`, p10) · one GEP Statistical Annex forecast row and one GEP Box question, both picked from the source pages in sub-project 8.
+- **Coverage (4)** — iMac sleep power at 230V (`0.59W`, table in endnote 18) · iMac carbon split (`50%`, `45%`, p10) · one GEP Statistical Annex forecast row (Bhutan 2026f, `7.1`, p189) and one GEP Box question (BOX 1.1: AI growth in the 2030s, `1970s`, pp30–35).
 - **Trap (4)** — iMac battery life · GPO budget in FY 2022 · GEP growth outlook for Antarctica · one off-topic question (e.g. "Who won the 2022 FIFA World Cup?").
-- **Isolation (1)** — East Asia and Pacific growth outlook: all cited sections must be EAP (or annex EAP rows); no figure that appears only in the South Asia section.
+- **Isolation (1)** — East Asia and Pacific growth outlook: all sources must be EAP (or Statistical Annex rows); `must_not_contain` holds South Asia-only figures (`6.3%`, `6.6%`).
 
 ### 8.2 Scorecard (`npm run eval`)
 
-Per question: **retrieval hit** (an expected page/section among final sources) · **fact match** (all `must_contain` present after normalization) · **citation precision** (cited pages ⊆ expected pages) · **verifier clean** · **trap refused** (refusal message, no numbers). The two broad GEP questions additionally get a Gemini judge scoring rubric coverage and unsupported claims. Results are written to `eval/results/<timestamp>.json` and printed as a table.
+Per question:
+- **Retrieval hit** — a final source sits in `expected_section` (or below it) or covers an expected page.
+- **Fact match** — every `must_contain` appears in the answer after normalization (case, dashes, thousands separators, `percent` → `%`).
+- **Citation precision** — the share of cited sources that are relevant (as for retrieval hit).
+- **Verifier clean** — no verifier warnings (the "reranking failed" notice is not a verifier warning).
+- **Trap refused** — the answer starts with "I couldn't find this" (the gate's message or the prompt's refusal rule). No numbers check: the gate's "Closest sections" list carries chapter numbers.
+- **Isolated** (isolation only) — every source in `expected_section` or the Statistical Annex, and no `must_not_contain` figure in the answer.
+- **Pass** — brief/coverage: hit, fact match and at least one relevant citation; isolation: also isolated; trap: refused. The pass bar (§1) is computed from these, plus "verifier clean" over all answered questions.
+
+The two broad GEP questions additionally get a judge (the utility model) scoring rubric coverage and unsupported claims; it is reported, not gated. Results are written to `eval/results/<timestamp>.json` and printed as a table; the command exits 1 when the pass bar is not met. `--only <id,id>` runs a subset (no pass bar).
 
 ### 8.3 Ablations
 
-`npm run eval -- --ablate` runs the set with `vectorOnly`, `noRerank`, `noRouter`, `noFootnotes` and prints a side-by-side table against the full pipeline, showing what each technique contributes per document shape.
+`npm run eval -- --ablate` runs the set with `vectorOnly`, `noRerank`, `noRouter`, `noFootnotes` and prints a side-by-side table (questions passed per document) against the full pipeline, showing what each technique contributes per document shape.
+- Ablation runs answer with the **utility model** (Flash-Lite), against a utility-model baseline `full (lite)`: Flash allows ~20 answers a day, and five runs of 18 questions need ~70. The main run stays on Flash.
+- `--config <name>` runs one ablation; query embeddings are shared across configs.
+- `vectorOnly` passes a NULL keyword query (no keyword rows); `noRerank` keeps the top 8 by RRF with no relevance gate; `noRouter` searches the scope's documents without section filters; `noFootnotes` leaves `Footnotes:` lines out of the context.
 
 ## 9. Testing
 
