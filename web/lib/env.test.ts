@@ -28,3 +28,13 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...VALID, EMBED_DIM: "4096" })).toThrow("EMBED_DIM");
   });
 });
+
+
+describe("utilityModel", () => {
+  it("prefers GEMINI_UTILITY_MODEL, then the summary model, then the chat model", async () => {
+    const { utilityModel } = await import("@/lib/env");
+    expect(utilityModel(parseEnv(VALID))).toBe("gemini-3.8-flash");
+    expect(utilityModel(parseEnv({ ...VALID, GEMINI_SUMMARY_MODEL: "lite" }))).toBe("lite");
+    expect(utilityModel(parseEnv({ ...VALID, GEMINI_SUMMARY_MODEL: "lite", GEMINI_UTILITY_MODEL: "tiny" }))).toBe("tiny");
+  });
+});
