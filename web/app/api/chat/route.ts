@@ -26,6 +26,6 @@ export async function POST(req: Request) {
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const problems = await schemaProblems();
   if (problems.length) return NextResponse.json({ error: problems.join("; ") }, { status: 503 });
-  const stream = ndjsonStream((emit) => answer(parsed.request, productionDeps(), emit));
+  const stream = ndjsonStream((emit, signal) => answer(parsed.request, productionDeps(signal), emit));
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
 }

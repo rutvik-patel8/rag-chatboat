@@ -27,8 +27,11 @@ export function rerankPrompt(question: string, candidates: Candidate[]): string 
 }
 
 /** One call scores all candidates 0–3 (spec §6.4). */
-export async function rerank(client: GenClient, model: string, question: string, candidates: Candidate[]): Promise<Map<number, number>> {
-  const answer = await generateJson<{ scores: { id: number; score: number }[] }>(client, model, rerankPrompt(question, candidates), SCHEMA);
+export async function rerank(
+  client: GenClient, model: string, question: string, candidates: Candidate[], signal?: AbortSignal,
+): Promise<Map<number, number>> {
+  const prompt = rerankPrompt(question, candidates);
+  const answer = await generateJson<{ scores: { id: number; score: number }[] }>(client, model, prompt, SCHEMA, { signal });
   return new Map(answer.scores.map(({ id, score }) => [id, Math.max(0, Math.min(3, Math.round(score)))]));
 }
 

@@ -3,11 +3,14 @@ import { errorMessage } from "@/lib/rag/health";
 
 /**
  * Stream `run`'s events as NDJSON, one JSON object per line. If the client goes away (Stop button, closed tab),
- * the next `emit` throws, so the answer stops instead of spending more Gemini calls, and nothing is written
- * to the closed stream.
+ * `signal` aborts in-flight Gemini calls and the next `emit` throws, so the answer stops instead of spending
+ * more calls, and nothing is written to the closed stream.
  */
-export function ndjsonStream(run: (emit: (event: ChatEvent) => void) => Promise<void>): ReadableStream<Uint8Array> {
+export function ndjsonStream(
+  run: (emit: (event: ChatEvent) => void, signal: AbortSignal) => Promise<void>,
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  const stop = new AbortController(); // aborts in-flight Gemini calls when the client goes away
   let closed = false;
   return new ReadableStream({
     async start(controller) {
@@ -16,7 +19,7 @@ export function ndjsonStream(run: (emit: (event: ChatEvent) => void) => Promise<
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       };
       try {
-        await run(emit);
+        await run(emit, stop.signal);
       } catch (error) {
         if (!closed) emit({ type: "error", message: errorMessage(error) });
       } finally {
@@ -25,6 +28,7 @@ export function ndjsonStream(run: (emit: (event: ChatEvent) => void) => Promise<
     },
     cancel() {
       closed = true;
+      stop.abort(new Error("client disconnected"));
     },
   });
 }

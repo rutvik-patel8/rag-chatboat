@@ -37,3 +37,18 @@ describe("ndjsonStream", () => {
     expect(afterCancel).toBeInstanceOf(Error);
   });
 });
+
+describe("ndjsonStream cancel", () => {
+  it("aborts the signal given to the answer, so in-flight Gemini calls stop", async () => {
+    let signal!: AbortSignal;
+    const stream = ndjsonStream(async (emit, s) => {
+      signal = s;
+      emit({ type: "text", delta: "first" });
+      await new Promise((resolve) => s.addEventListener("abort", resolve));
+    });
+    const reader = stream.getReader();
+    await reader.read();
+    await reader.cancel();
+    expect(signal.aborted).toBe(true);
+  });
+});
