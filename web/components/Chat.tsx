@@ -145,7 +145,13 @@ export function Chat() {
           className="flex-1 resize-none rounded border border-zinc-300 bg-transparent p-2 dark:border-zinc-700"
         />
         {busy ? (
-          <button type="button" onClick={() => abort.current?.abort()} className="rounded bg-zinc-600 px-4 text-white">Stop</button>
+          <button
+            type="button"
+            onClick={(e) => e.detail < 2 && abort.current?.abort()} // a double-clicked Send lands its 2nd click here
+            className="rounded bg-zinc-600 px-4 text-white"
+          >
+            Stop
+          </button>
         ) : (
           <button type="submit" disabled={!input.trim()} className="rounded bg-blue-600 px-4 text-white disabled:opacity-50">Send</button>
         )}
