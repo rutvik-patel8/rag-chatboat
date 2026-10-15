@@ -68,7 +68,7 @@ These facts drove the design:
 | Storage | Postgres 16 + pgvector (Docker Compose) |
 | Embeddings | `gemini-embedding-001`, output dimensionality **768**, task types `RETRIEVAL_DOCUMENT` / `RETRIEVAL_QUERY` |
 | LLM | Gemini Flash-class model for routing, reranking, generation, vision, section summaries |
-| Serving | Next.js (App Router, TypeScript), Vercel AI SDK + `@ai-sdk/google`, `pg`, `zod`, vitest |
+| Serving | Next.js (App Router, TypeScript), `@google/genai` (one client for query embeddings, helper calls and streamed answers), `pg`, `zod`, vitest |
 
 Model IDs are configured in `.env` (`GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM`), never hard-coded. Current IDs are confirmed against Gemini docs at implementation time.
 
@@ -216,17 +216,19 @@ Probing showed the PDF's typography is a cleaner source of structure than its co
 
 ## 6. Retrieval and answer generation (Next.js `/api/chat`)
 
-Request (zod-validated): `{ question: string (≤ 1000 chars), scope: "gpo"|"gep"|"imac"|"all", history: {role, content}[] (last 6), options?: {vectorOnly?, noRerank?, noRouter?, noFootnotes?} }`. `options` are accepted only when `NODE_ENV !== "production"`.
+Request (zod-validated): `{ question: string (≤ 1000 chars), scope: "gpo"|"gep"|"imac"|"all", history: {role, content}[] (last 6), options?: {vectorOnly?, noRerank?, noRouter?, noFootnotes?} }`. `options` are accepted only when `NODE_ENV !== "production"` and arrive with the evaluation sub-project (§8.3).
+
+**Models:** the final answer uses `GEMINI_CHAT_MODEL` (Flash). Condensing and reranking use `GEMINI_UTILITY_MODEL` (default: the summary model, Flash-Lite), because the free tier allows Flash only ~20 generations a day.
 
 1. **Condense** (`condense.ts`) — only if `history` is non-empty: Gemini rewrites the question as standalone.
 2. **Route** (`router.ts`)
    - Deterministic regexes first: `chapter \d`, `box \d\.\d`, `executive summary`, `statistical annex`, region names + aliases (EAP, ECA, LAC, MNA/MENAAP, SAR, SSA). An explicit match → **hard filter** on matching `section_id`s (including descendants).
-   - Then Gemini structured output, given in-scope section titles: `{docs[], sections[], intent: "fact"|"summary"|"comparison"|"out_of_scope", keywords[]}`. Sections here are a **soft boost** only.
-   - In `all` scope the router chooses documents (fallback: all three).
+   - In `all` scope, document keywords pick the documents (GPO: "GPO", "govinfo", "depository"…; iMac: "iMac", "ENERGY STAR"…; GEP: "World Bank", "EMDE", region names…), falling back to all three; a GEP section match restricts the search to GEP.
+   - No LLM routing call: the reranker already judges relevance, and an LLM router would spend scarce free-tier generations. Out-of-scope questions are refused by the relevance gate (step 6).
 3. **Hybrid search** (`retrieve.ts`, single SQL statement)
    - Vector top 40 by cosine distance (HNSW) ∪ keyword top 40 by `ts_rank_cd(tsv, websearch_to_tsquery('english', q))`.
-   - Fused with reciprocal rank fusion, k = 60; +0.2 × max-RRF bonus for chunks in router-boosted sections.
-   - `intent = summary` → also fetch `section_summary` chunks for the targeted sections.
+   - Keyword query = the question's words joined with OR (`websearch_to_tsquery`), so long questions still match.
+   - Fused with reciprocal rank fusion, k = 60. Section-summary chunks compete in the same search (they win broad questions).
 4. **Rerank** (`rerank.ts`) — one Gemini call scores the top 20 candidates 0–3 ("does this passage answer the question?"); keep the top 8 with score ≥ 2.
 5. **Assemble context** (`context.ts`)
    - GEP child chunks: add ±1 neighbour (`seq`) in the same section; merge adjacent.
@@ -244,7 +246,7 @@ Request (zod-validated): `{ question: string (≤ 1000 chars), scope: "gpo"|"gep
    - Every number in the answer must appear in at least one cited source after normalization (`numbers.ts`: thousands separators, `percent`↔`%`, `$` and `billion/million`, decimals, `<1%`).
    - Failures are returned as `warnings[]`; the UI shows an "unverified figure" badge.
 
-**Response:** streamed text + final data part `{ sources: [{id, doc, sectionPath, page, kind, snippet}], warnings: [], debug: {router, candidates: [{chunkId, vecRank, kwRank, rrf, rerank}], tokens} }`.
+**Response:** `application/x-ndjson`, one JSON event per line: `{type: "sources", sources: [{id, doc, sectionPath, pageStart, pageEnd, kind, snippet}]}`, then `{type: "text", delta}` events, then `{type: "done", warnings, debug: {question, route, candidates: [{chunkId, vecRank, kwRank, rrf, rerank}]}}`; failures send `{type: "error", message}`. Invalid requests get HTTP 400; an embedding/schema mismatch or unreachable DB gets HTTP 503 before streaming.
 
 ### 6.1 UI (`app/page.tsx`)
 

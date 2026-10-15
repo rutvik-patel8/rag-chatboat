@@ -41,3 +41,16 @@ npm test                     # unit tests
 npm run test:int             # + DB integration tests (DB must be running)
 npm run test:live            # + tests that call the real Gemini API
 ```
+
+## Chat API
+
+`POST /api/chat` with `{"question": "...", "scope": "gpo" | "gep" | "imac" | "all", "history": [...]}` streams
+newline-delimited JSON events: `sources`, then `text` deltas, then `done` (warnings, debug) — or `error`.
+
+```bash
+curl -sN -X POST localhost:3100/api/chat -H 'content-type: application/json' \
+  -d '{"question":"What is the growth outlook for South Asia?","scope":"gep"}'
+```
+
+Answers use `GEMINI_CHAT_MODEL`; reranking and follow-up rewriting use `GEMINI_UTILITY_MODEL`
+(default: `GEMINI_SUMMARY_MODEL`, then the chat model).
