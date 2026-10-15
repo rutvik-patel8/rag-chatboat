@@ -50,7 +50,7 @@ class BuildResult:
 
 
 Profile = Callable[[DocSpec, Prepared], BuildResult]
-Summarizer = Callable[[DocSpec, list[SectionDraft]], list[ChunkDraft]]
+Summarizer = Callable[[DocSpec, list[SectionDraft], list[str]], list[ChunkDraft]]  # appends warnings
 
 
 def prepare(spec: DocSpec) -> Prepared:
@@ -121,7 +121,7 @@ def run(
     cited = attach_footnotes(result.chunks, prepared.notes, report)
     chunks = result.chunks + note_chunks(prepared.notes.notes, result.sections, cited)
     if spec.summaries and summarizer is not None:
-        chunks += summarizer(spec, result.sections)
+        chunks += summarizer(spec, result.sections, report.warnings)
     paths = {s.key: s.path for s in result.sections}
     texts = [build_embed_text(spec.title, paths[c.section_key], c.page_start, c.page_end, c.kind, c.content) for c in chunks]
     check_token_limit(texts, chunks)

@@ -31,9 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     embedder = make_embedder(settings)
     generator = make_generator(settings)
 
-    def summarizer(spec, sections):
+    def summarizer(spec, sections, warnings):
         cache = JsonCache(CACHE_ROOT, f"{spec.slug}/summaries")
-        return summary_chunks(spec.title, sections, generator, cache, settings.chat_model)
+        return summary_chunks(spec.title, sections, generator, cache, settings.chat_model, warnings)
 
     with connect(settings) as conn:
         for slug in args.docs:

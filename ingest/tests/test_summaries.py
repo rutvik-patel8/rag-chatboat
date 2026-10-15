@@ -62,3 +62,27 @@ def test_truncate_tokens():
     text = "word " * 50
     assert count_tokens(truncate_tokens(text, 10)) <= 10
     assert truncate_tokens("short text", 10) == "short text"
+
+
+class QuotaExhausted:
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, prompt):
+        self.calls += 1
+        raise RuntimeError("429 RESOURCE_EXHAUSTED daily quota")
+
+
+def test_generation_failure_keeps_cached_summaries_and_stops_calling(tmp_path):
+    cache = JsonCache(tmp_path, "gep/summaries")
+    sections = tree()
+    summary_chunks("GEP", sections[:4], FakeGenerator(), cache, "m")  # caches ch2 (its subtree is only South Asia then)
+    sections.append(SectionDraft("ssa", "Sub-Saharan Africa", 2, "Ch. 2 Regional Outlooks › Sub-Saharan Africa", 99, 102, "ch2", "region", LONG))
+    failing, warnings = QuotaExhausted(), []
+    chunks = summary_chunks("GEP", sections[:4], failing, cache, "m", warnings)
+    assert [c.section_key for c in chunks] == ["ch2", "sar"]  # both cached by the first run
+    assert failing.calls == 0
+    chunks = summary_chunks("GEP", sections, failing, cache, "m", warnings)
+    assert failing.calls == 1  # ch2's prompt changed (new child), so it fails; ssa is not even tried
+    assert [c.section_key for c in chunks] == ["sar"]
+    assert warnings == ["2 section summaries skipped (429 RESOURCE_EXHAUSTED daily quota); re-run ingest.py later to fill them in"]

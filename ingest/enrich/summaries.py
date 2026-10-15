@@ -37,9 +37,14 @@ def subtree_texts(sections: list[SectionDraft]) -> dict[str, str]:
     return {section.key: text(section) for section in sections}
 
 
-def summary_chunks(doc_title: str, sections: list[SectionDraft], generator, cache: JsonCache, model: str) -> list[ChunkDraft]:
+def summary_chunks(
+    doc_title: str, sections: list[SectionDraft], generator, cache: JsonCache, model: str, warnings: list[str] | None = None
+) -> list[ChunkDraft]:
+    """After the first generation failure (e.g. a daily quota) no more calls are made; cached summaries still count."""
     texts = subtree_texts(sections)
     chunks = []
+    failure: Exception | None = None
+    skipped = 0
     for section in sections:
         text = texts[section.key]
         if not 1 <= section.level <= 2 or count_tokens(text) < MIN_TOKENS:
@@ -47,10 +52,19 @@ def summary_chunks(doc_title: str, sections: list[SectionDraft], generator, cach
         prompt = PROMPT.format(doc=doc_title, path=section.path, text=truncate_tokens(text, MAX_INPUT_TOKENS))
         key = JsonCache.key(model, PROMPT_VERSION, prompt)
         summary = cache.get(key)
+        if summary is None and failure is None:
+            try:
+                summary = generator.generate(prompt)
+                cache.put(key, summary)
+            except Exception as exc:
+                failure = exc
         if summary is None:
-            summary = generator.generate(prompt)
-            cache.put(key, summary)
+            skipped += 1
+            continue
         chunks.append(
             ChunkDraft(section.key, "section_summary", f"Summary of {section.path}: {summary}", section.page_start, section.page_end)
         )
+    if skipped and warnings is not None:
+        reason = str(failure).splitlines()[0][:120]
+        warnings.append(f"{skipped} section summaries skipped ({reason}); re-run ingest.py later to fill them in")
     return chunks

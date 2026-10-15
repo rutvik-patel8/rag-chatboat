@@ -66,7 +66,7 @@ def test_summaries_are_added_only_when_the_spec_asks(conn, tmp_path):
     settings = load_settings()
     calls = []
 
-    def summarizer(spec, sections):
+    def summarizer(spec, sections, warnings):
         calls.append(spec.slug)
         root = next(s for s in sections if s.level == 0)
         return [ChunkDraft(root.key, "section_summary", "Summary of iMac: recycled aluminum stand.", 1, 12)]
