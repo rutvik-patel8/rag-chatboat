@@ -40,5 +40,7 @@ export function routeQuestion(question: string, scope: Scope, catalog: Catalog):
     if (pattern.test(question) && has(path)) paths.push(path);
   }
   if (paths.length && scope === "all") docs = ["gep"];
-  return { docs, paths: [...new Set(paths)] };
+  // "Chapter 2 … South Asia": the region alone, or the chapter filter would let every region back in
+  const specific = [...new Set(paths)].filter((p) => !paths.some((other) => other.startsWith(`${p} › `)));
+  return { docs, paths: specific };
 }

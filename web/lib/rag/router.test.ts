@@ -26,6 +26,10 @@ describe("routeQuestion", () => {
     expect(routeQuestion("How is EAP doing?", "gep", catalog).paths).toEqual([`${CH2} › East Asia and Pacific`]);
   });
 
+  it("keeps only the most specific section when a chapter and a region are both named", () => {
+    expect(routeQuestion("What does Chapter 2 say about South Asia?", "all", catalog).paths).toEqual([`${CH2} › South Asia`]);
+  });
+
   it("maps chapter, box, executive summary and annex mentions to their sections", () => {
     expect(routeQuestion("What does Chapter 3 say about sovereign debt?", "gep", catalog).paths).toEqual([
       "Ch. 3 A Rising Challenge: Sovereign Debt Levels and Interest Rates in EMDEs",
