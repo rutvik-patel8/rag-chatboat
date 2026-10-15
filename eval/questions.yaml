@@ -14,7 +14,7 @@
   scope: gpo
   question: What new digital system replaced FDsys, and when was it fully deployed?
   must_contain: ["govinfo", "2018"]
-  expected_pages: [4]
+  expected_pages: [4, 10, 22] # p4 full-scale deployment; p10 and p22 govinfo succeeding FDsys
 
 - id: gpo-procurement
   type: brief
@@ -35,7 +35,7 @@
   type: brief
   scope: gep
   question: What does Chapter 3 say about sovereign debt in developing economies?
-  must_contain: ["interest rate"]
+  must_contain: ["interest rate", "non-linear"]
   expected_pages: ["107-138"]
   expected_section: "Ch. 3 A Rising Challenge: Sovereign Debt Levels and Interest Rates in EMDEs"
   rubric: # p109 (chapter summary), also p19
@@ -51,7 +51,7 @@
   type: brief
   scope: gep
   question: According to the executive summary, what are the main risks to the global outlook?
-  must_contain: ["downside"]
+  must_contain: ["downside", "1.3%"]
   expected_pages: [19, 20]
   expected_section: Executive Summary
   rubric: # p19
@@ -68,7 +68,7 @@
   scope: imac
   question: How much less energy does iMac use compared to the ENERGY STAR requirement?
   must_contain: ["58%"]
-  expected_pages: [7]
+  expected_pages: [7, 12] # p12: endnote 18 (ENERGY STAR basis)
 
 - id: imac-carbon
   type: brief
@@ -81,7 +81,7 @@
   type: brief
   scope: imac
   question: What material is the iMac stand made from, and what percentage of it is recycled?
-  must_contain: ["aluminum", "100"]
+  must_contain: ["aluminum", "100%"]
   expected_pages: [1, 2, 4]
 
 - id: imac-sleep-230v
@@ -104,7 +104,6 @@
   question: According to the statistical annex, what is Bhutan's real GDP growth forecast for 2026?
   must_contain: ["7.1"]
   expected_pages: [189]
-  expected_section: Statistical Annex
 
 - id: gep-box-ai
   type: coverage
@@ -139,6 +138,6 @@
   scope: gep
   question: What is the growth outlook for East Asia and Pacific?
   must_contain: ["4.2%"]
-  must_not_contain: ["6.3%", "6.6%"] # South Asia-only figures (pp96-98), absent from the EAP pages 81-83
+  must_not_contain: ["6.3%", "7%"] # from the South Asia outlook (pp96-98); neither appears on the EAP pages 81-83
   expected_pages: ["81-83"]
   expected_section: Ch. 2 Regional Outlooks › East Asia and Pacific
