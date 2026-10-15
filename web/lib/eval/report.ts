@@ -19,7 +19,7 @@ export function scorecard(results: Result[]): string {
   return table([["question", "type", "hit", "facts", "cited", "verifier", "refused", "isolated", "rubric", "result"], ...rows]);
 }
 
-/** The pass bar of spec §1, from one config's results. */
+/** The pass bar of spec §1, from one config's results; any errored question also fails it. */
 export function passBar(results: Result[]): { lines: string[]; passed: boolean } {
   const of = (type: string) => results.filter((r) => r.type === type);
   const passed = (rs: Result[]) => rs.filter((r) => r.score.pass).length;
@@ -30,6 +30,7 @@ export function passBar(results: Result[]): { lines: string[]; passed: boolean }
     ["Trap questions refused", passed(of("trap")), of("trap").length],
     ["Region isolation", passed(of("isolation")), of("isolation").length],
     ["Answers with every figure verified", clean, answered.length],
+    ["Questions answered without errors", results.filter((r) => !r.error).length, results.length],
   ];
   return {
     lines: checks.map(([label, got, total]) => `${got === total && total > 0 ? "✓" : "✗"} ${label}: ${got}/${total}`),

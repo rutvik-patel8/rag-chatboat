@@ -37,6 +37,9 @@ export async function runQuestion(q: EvalQuestion, config: EvalConfig, deps: Dep
   } catch (error) {
     outcome.error = errorMessage(error);
   }
+  if (!outcome.error && !config.options.noRerank && outcome.warnings.some((w) => w.startsWith("reranking failed"))) {
+    outcome.error = "reranking failed (the run is not the full pipeline)"; // a 429 silently dropped the relevance gate
+  }
   return outcome;
 }
 

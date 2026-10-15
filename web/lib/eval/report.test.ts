@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "@/lib/eval/cli";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { openResults, parseArgs } from "@/lib/eval/cli";
 import { ablationTable, passBar, scorecard } from "@/lib/eval/report";
 import type { Result } from "@/lib/eval/run";
 import type { Score } from "@/lib/eval/score";
@@ -29,7 +32,10 @@ describe("passBar", () => {
       result("c1", "coverage", "imac", { verifier: false }),
     ];
     expect(passBar(results)).toEqual({
-      lines: ["✗ Brief questions answered with citations: 1/2", "✓ Trap questions refused: 1/1", "✓ Region isolation: 1/1", "✗ Answers with every figure verified: 3/4"],
+      lines: [
+        "✗ Brief questions answered with citations: 1/2", "✓ Trap questions refused: 1/1", "✓ Region isolation: 1/1",
+        "✗ Answers with every figure verified: 3/4", "✓ Questions answered without errors: 5/5",
+      ],
       passed: false,
     });
   });
@@ -58,5 +64,29 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["--config", "noRerank"])).toThrow("--config needs --ablate");
     expect(() => parseArgs(["--ablate", "--config", "fast"])).toThrow('unknown config "fast"');
     expect(() => parseArgs(["--verbose"])).toThrow("unknown or incomplete option: --verbose");
+  });
+});
+
+describe("passBar with errors", () => {
+  it("is not met when any question errored, even an ungated one", () => {
+    const results = [
+      result("b1", "brief", "gpo"), result("t1", "trap", "imac", { refused: true }), result("i1", "isolation", "gep", { isolated: true }),
+      { ...result("c1", "coverage", "imac", { pass: false, verifier: null }), error: "503" },
+    ];
+    const bar = passBar(results);
+    expect(bar.lines.at(-1)).toBe("✗ Questions answered without errors: 3/4");
+    expect(bar.passed).toBe(false);
+  });
+});
+
+describe("openResults", () => {
+  it("saves each result as it arrives, then the full summary", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "eval-"));
+    const out = openResults(root, new Date("2026-10-15T12:00:00Z"), false);
+    out.append(result("b1", "brief", "gpo"));
+    expect(readFileSync(out.partial, "utf8").trim().split("\n").map((line) => JSON.parse(line).id)).toEqual(["b1"]);
+    out.finish({ models: {} }, [result("b1", "brief", "gpo")]);
+    expect(path.relative(root, out.file)).toBe(path.join("eval", "results", "2026-10-15T12-00-00-000Z.json"));
+    expect(JSON.parse(readFileSync(out.file, "utf8")).results.map((r: { id: string }) => r.id)).toEqual(["b1"]);
   });
 });

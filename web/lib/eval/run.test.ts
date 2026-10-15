@@ -87,3 +87,11 @@ describe("judge", () => {
     expect(await judge(client, "lite", question, "a", [])).toEqual({ covered: 1, total: 2, unsupported: ["rates doubled"] });
   });
 });
+
+describe("runQuestion when reranking fails", () => {
+  it("records an error, because the pipeline silently lost its relevance gate", async () => {
+    const failing = deps({ rerank: async () => Promise.reject(new Error("429")) });
+    expect((await runQuestion(q(), MAIN, failing)).error).toBe("reranking failed (the run is not the full pipeline)");
+    expect((await runQuestion(q(), ABLATIONS[2], failing)).error).toBeUndefined(); // noRerank never calls it
+  });
+});
