@@ -9,6 +9,10 @@ const ChatRequestSchema = z.object({
     .max(100)
     .default([])
     .transform((turns) => turns.slice(-6)), // spec §6.1: the last 6 turns
+  options: z
+    .strictObject({ vectorOnly: z.boolean(), noRerank: z.boolean(), noRouter: z.boolean(), noFootnotes: z.boolean() })
+    .partial()
+    .optional(),
 });
 
 export function parseChatRequest(body: unknown): { ok: true; request: ChatRequest } | { ok: false; error: string } {
@@ -16,5 +20,7 @@ export function parseChatRequest(body: unknown): { ok: true; request: ChatReques
   if (!result.success) {
     return { ok: false, error: result.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ") };
   }
-  return { ok: true, request: result.data };
+  const { options, ...request } = result.data;
+  // Ablation switches are for the evaluation (spec §6): never honoured in production.
+  return { ok: true, request: process.env.NODE_ENV === "production" || !options ? request : { ...request, options } };
 }

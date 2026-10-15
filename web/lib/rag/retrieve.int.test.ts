@@ -27,6 +27,13 @@ describe.skipIf(!process.env.RUN_INTEGRATION)("hybrid search (live DB)", () => {
     expect(found.some((c) => c.vecRank !== null && c.kwRank !== null)).toBe(true);
   });
 
+  it("searches by vector alone when keyword search is off (the vectorOnly ablation)", async () => {
+    const vector = await vectorOf("Growth in SAR is expected%");
+    const found = await hybridSearch(getPool(), { vector, question: "growth outlook South Asia", docs: ["gep"], paths: [SAR], keyword: false });
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((c) => c.kwRank === null && c.vecRank !== null)).toBe(true);
+  });
+
   it("restricts to the requested documents and loads text neighbours", async () => {
     const vector = await vectorOf("Growth in SAR is expected%");
     const found = await hybridSearch(getPool(), { vector, question: "growth", docs: ["gpo"], paths: [] });

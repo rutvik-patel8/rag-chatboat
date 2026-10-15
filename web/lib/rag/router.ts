@@ -20,6 +20,11 @@ export const REGIONS: [RegExp, string][] = [
   [/\b(sub-saharan africa|ssa)\b/i, "Sub-Saharan Africa"],
 ];
 
+/** The scope's documents with no section filters (the noRouter ablation). */
+export function scopeRoute(scope: Scope, catalog: Catalog): Route {
+  return { docs: scope === "all" ? Object.keys(catalog) : [scope], paths: [] };
+}
+
 export function routeQuestion(question: string, scope: Scope, catalog: Catalog): Route {
   const detected = Object.keys(DOC_HINTS).filter((slug) => slug in catalog && DOC_HINTS[slug].test(question));
   let docs = scope !== "all" ? [scope] : detected.length ? detected : Object.keys(catalog);

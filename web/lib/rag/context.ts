@@ -36,7 +36,9 @@ export function sectionLabel(docTitle: string, sectionPath: string): string {
   return sectionPath ? `${docTitle} › ${sectionPath}` : docTitle;
 }
 
-export function buildBlocks(picked: Candidate[], neighbours: Map<string, Neighbour>, budget = CONTEXT_CHARS): SourceBlock[] {
+export function buildBlocks(
+  picked: Candidate[], neighbours: Map<string, Neighbour>, budget = CONTEXT_CHARS, { footnotes: withFootnotes = true } = {},
+): SourceBlock[] {
   const used = new Set(picked.map((c) => c.id));
   const blocks: SourceBlock[] = [];
   let size = 0;
@@ -46,7 +48,7 @@ export function buildBlocks(picked: Candidate[], neighbours: Map<string, Neighbo
       const n = c.kind === "text" ? neighbours.get(`${c.sectionId}:${seq}`) : undefined;
       return n && !used.has(n.id) ? [{ content: n.content, id: n.id, start: n.page_start, end: n.page_end }] : [];
     };
-    const footnotes = c.footnotes.map((f) => `${f.n}. ${f.text}`).join("\n");
+    const footnotes = withFootnotes ? c.footnotes.map((f) => `${f.n}. ${f.text}`).join("\n") : "";
     const render = (ps: (typeof own)[]) => ps.map((p) => p.content).join("\n\n") + (footnotes ? `\n\nFootnotes:\n${footnotes}` : "");
     let parts = [...around(c.seq - 1), own, ...around(c.seq + 1)];
     let text = render(parts);
