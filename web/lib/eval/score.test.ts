@@ -51,7 +51,32 @@ describe("scoreAnswer", () => {
     const eap = question({ type: "isolation", must_contain: ["4.2%"], must_not_contain: ["6.3%"], expected_pages: [81, 82, 83], expected_section: EAP });
     const ok = [source(1, `${EAP} › Outlook`, 81), source(2, "Statistical Annex", 187)];
     expect(scoreAnswer(eap, { answer: "EAP growth is 4.2 percent [S1][S2].", sources: ok, warnings: [] })).toMatchObject({ isolated: true, pass: true });
-    expect(scoreAnswer(eap, { answer: "4.2 percent [S1].", sources: [...ok, source(3, SAR, 96)], warnings: [] })).toMatchObject({ isolated: false, pass: false });
+    expect(scoreAnswer(eap, { answer: "4.2 percent [S1][S3].", sources: [...ok, source(3, SAR, 96)], warnings: [] })).toMatchObject({ isolated: false, pass: false });
     expect(scoreAnswer(eap, { answer: "4.2 percent [S1], vs 6.3 percent [S1].", sources: ok, warnings: [] })).toMatchObject({ isolated: false, pass: false });
+  });
+});
+
+describe("scoring edge cases from the review", () => {
+  it("matches figures on number boundaries only", () => {
+    const q = question({ must_contain: ["6.3%"], expected_pages: [96] });
+    const src = [source(1, SAR, 96)];
+    expect(scoreAnswer(q, { answer: "Growth is 16.3 percent [S1].", sources: src, warnings: [] }).facts).toBe(false);
+    expect(scoreAnswer(q, { answer: "Growth is 6.3 percent [S1].", sources: src, warnings: [] }).facts).toBe(true);
+    expect(scoreAnswer(question({ must_contain: ["375"], expected_pages: [96] }), { answer: "$375.7 million [S1]", sources: src, warnings: [] }).facts).toBe(true);
+    expect(scoreAnswer(question({ must_contain: ["interest rate"], expected_pages: [96] }), { answer: "higher interest rates [S1]", sources: src, warnings: [] }).facts).toBe(true);
+  });
+
+  it("accepts a curly-apostrophe refusal but not a refusal that goes on to cite sources", () => {
+    const trap = question({ type: "trap", scope: "gpo" });
+    expect(scoreAnswer(trap, { answer: "I couldn’t find this in the documents.", sources: [], warnings: [] }).refused).toBe(true);
+    const leaky = "I couldn't find this exactly. However, the FY 2022 budget was $117 million [S1].";
+    expect(scoreAnswer(trap, { answer: leaky, sources: [source(1, "Budget", 14)], warnings: [] }).refused).toBe(false);
+  });
+
+  it("judges isolation on the sources the answer cites", () => {
+    const eap = question({ type: "isolation", must_contain: ["4.2%"], expected_pages: [81], expected_section: EAP });
+    const sources = [source(1, `${EAP} › Outlook`, 81), source(2, "Ch. 2 Regional Outlooks › Outlook", 73)];
+    expect(scoreAnswer(eap, { answer: "EAP growth is 4.2 percent [S1].", sources, warnings: [] }).isolated).toBe(true);
+    expect(scoreAnswer(eap, { answer: "EAP growth is 4.2 percent [S1][S2].", sources, warnings: [] }).isolated).toBe(false);
   });
 });
