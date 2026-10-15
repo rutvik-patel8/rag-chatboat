@@ -65,3 +65,17 @@ Pick a document (or "All documents") and ask a question, or click one of the sta
 the sources drawer: the passage the answer used, its section and page, and an "Open page" link to the PDF.
 "Show retrieval" shows the router's filters and each candidate's vector, keyword and rerank scores; ⚠ marks figures
 the verifier could not find in the cited sources.
+
+## Evaluation
+
+```bash
+cd web
+npm run eval                            # 18 questions on the full pipeline (Flash answers), pass bar of spec §1
+npm run eval -- --only gep-south-asia   # a subset (no pass bar)
+npm run eval -- --ablate                # vectorOnly / noRerank / noRouter / noFootnotes vs full, on Flash-Lite
+npm run eval -- --ablate --config noRerank
+```
+
+Questions live in `eval/questions.yaml`; every expected fact was copied from the PDF page it cites. Each run prints a
+scorecard (retrieval hit, fact match, citation precision, verifier, trap refusal, isolation, rubric judge) and writes
+`eval/results/<timestamp>.json` (git-ignored). A main run costs ~14 Flash answers of the free tier's ~20 a day.
