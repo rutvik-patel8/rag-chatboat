@@ -17,9 +17,10 @@ export type SourceBlock = {
 
 type Neighbour = { id: number; section_id: number; seq: number; content: string; page_start: number; page_end: number };
 
-/** Text chunks next to each picked text chunk in the same section (seq ± 1), keyed by "section:seq". */
+/** GEP text chunks next to each picked GEP text chunk in the same section (seq ± 1), keyed by "section:seq".
+ * Only GEP (spec §6.5): its child chunks split long sections; GPO chunks already overlap. */
 export async function loadNeighbours(pool: Pool, picked: Candidate[]): Promise<Map<string, Neighbour>> {
-  const texts = picked.filter((c) => c.kind === "text");
+  const texts = picked.filter((c) => c.kind === "text" && c.docSlug === "gep");
   if (!texts.length) return new Map();
   const { rows } = await pool.query<Neighbour>(
     `SELECT c.id, c.section_id, c.seq, c.content, c.page_start, c.page_end
@@ -40,21 +41,21 @@ export function buildBlocks(picked: Candidate[], neighbours: Map<string, Neighbo
   const blocks: SourceBlock[] = [];
   let size = 0;
   for (const c of picked) {
-    const parts = [{ content: c.content, id: c.id, start: c.pageStart, end: c.pageEnd }];
-    if (c.kind === "text") {
-      for (const [seq, place] of [[c.seq - 1, "before"], [c.seq + 1, "after"]] as const) {
-        const n = neighbours.get(`${c.sectionId}:${seq}`);
-        if (n && !used.has(n.id)) {
-          used.add(n.id);
-          const part = { content: n.content, id: n.id, start: n.page_start, end: n.page_end };
-          if (place === "before") parts.unshift(part);
-          else parts.push(part);
-        }
-      }
-    }
+    const own = { content: c.content, id: c.id, start: c.pageStart, end: c.pageEnd };
+    const around = (seq: number) => {
+      const n = c.kind === "text" ? neighbours.get(`${c.sectionId}:${seq}`) : undefined;
+      return n && !used.has(n.id) ? [{ content: n.content, id: n.id, start: n.page_start, end: n.page_end }] : [];
+    };
     const footnotes = c.footnotes.map((f) => `${f.n}. ${f.text}`).join("\n");
-    const text = parts.map((p) => p.content).join("\n\n") + (footnotes ? `\n\nFootnotes:\n${footnotes}` : "");
-    if (blocks.length && size + text.length > budget) break; // keep the best-ranked blocks within budget
+    const render = (ps: (typeof own)[]) => ps.map((p) => p.content).join("\n\n") + (footnotes ? `\n\nFootnotes:\n${footnotes}` : "");
+    let parts = [...around(c.seq - 1), own, ...around(c.seq + 1)];
+    let text = render(parts);
+    if (blocks.length && size + text.length > budget) {
+      parts = [own]; // drop the neighbours before dropping a scored pick
+      text = render(parts);
+      if (size + text.length > budget) break; // keep the best-ranked blocks within budget
+    }
+    parts.forEach((p) => used.add(p.id));
     size += text.length;
     const pageStart = Math.min(...parts.map((p) => p.start));
     const pageEnd = Math.max(...parts.map((p) => p.end));
