@@ -116,7 +116,7 @@ DOC_CHECKS: dict[str, list[Check]] = {
     "imac": [
         chunk_with("0.59W", "table"),
         chunk_with("45%", "table"),
-        chunk_with("approximate, read from chart", "chart"),
+        chunk_with("measured from the chart", "chart"),
         chunk_with_footnote("58 percent less energy than the requirement for ENERGY STAR", 18),
         chunk_with("recycled aluminum in the stand"),
         kind_at_least("footnote", 19),

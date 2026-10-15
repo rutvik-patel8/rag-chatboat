@@ -6,8 +6,12 @@ into typed blocks. Numbers the model reads are checked against the PDF's own tex
 from __future__ import annotations
 
 import re
+import statistics
 from collections import defaultdict
 from dataclasses import replace
+from pathlib import Path
+
+import pymupdf
 
 from chunk.common import Paragraph, pack, paragraphs_from_pages
 from model import ChunkDraft, Page, Ref, SectionDraft
@@ -17,7 +21,9 @@ TARGET_TOKENS = 400
 OVERLAP_TOKENS = 50
 TITLE_SIZE = 20.0  # page titles are 24pt
 APPROXIMATE = "(approximate, read from chart)"
+MEASURED = "(measured from the chart's shapes)"
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+_TOTAL = re.compile(r"([-–−]?\d[\d,]*(?:\.\d+)?)\s*([A-Za-z%]+)")
 
 
 def page_title(page: Page) -> str | None:
@@ -34,19 +40,95 @@ def verify(block: dict, page_numbers: set[str], page_no: int) -> tuple[dict, lis
     warnings = []
     values = []
     for value in block["values"]:
-        if not value["estimated"] and not numbers(value["value"]) <= page_numbers:
+        if not value["estimated"] and not block.get("measured") and not numbers(value["value"]) <= page_numbers:
             value = {**value, "estimated": True}
             warnings.append(f"p{page_no}: chart value {value['label']}={value['value']} not printed; marked approximate")
         values.append(value)
+    estimates = [v for v in block["values"] if v["estimated"]]  # the model's own estimates, "anchored on printed totals"
+    total = _TOTAL.search(block["markdown"]) if block["kind"] == "chart" else None
+    if estimates and total and all(_NUMBER.fullmatch(v["value"]) for v in estimates):
+        printed = _to_number(total.group(1))
+        summed = sum(_to_number(v["value"]) for v in estimates)
+        if printed > 0 and abs(summed - printed) > 0.03 * printed:  # the prompt says "anchored on printed totals"
+            warnings.append(f"p{page_no}: chart estimates sum to {summed:g} vs printed {printed:g}; values dropped")
+            values = [v for v, original in zip(values, block["values"]) if not original["estimated"]]
     unseen = sorted(numbers(block["markdown"]) - page_numbers)
     if unseen and block["kind"] in ("table", "callout"):
         warnings.append(f"p{page_no}: {block['kind']} numbers not in the text layer: {', '.join(unseen)}")
     return {**block, "values": values}, warnings
 
 
+def _to_number(text: str) -> float:
+    return float(text.replace("–", "-").replace("−", "-").replace(",", ""))
+
+
+def _bar_columns(pdf_path: Path | str, page_number: int) -> list[tuple[int, int, list[tuple[float, float]]]]:
+    """Filled rectangles stacked in one x-range: (x0, x1, [(y0, y1), …]) per bar, top to bottom."""
+    with pymupdf.open(pdf_path) as doc:
+        page = doc[page_number - 1]
+        width, drawings = page.rect.width, page.get_drawings()
+    columns: dict[tuple[int, int], list[tuple[float, float]]] = defaultdict(list)
+    for drawing in drawings:
+        if drawing.get("fill") is None:
+            continue
+        for item in drawing["items"]:
+            if item[0] == "re" and 20 < item[1].width < 0.5 * width and item[1].height > 3:
+                columns[(round(item[1].x0), round(item[1].x1))].append((item[1].y0, item[1].y1))
+    return [(x0, x1, sorted(segments)) for (x0, x1), segments in sorted(columns.items()) if len(segments) >= 2]
+
+
+def measure_bars(pdf_path: Path | str, page: Page) -> list[dict]:
+    """Exact segment values for vector stacked-bar charts: each segment's height scaled to its bar's printed total.
+
+    A bar is a column of filled rectangles with a printed total ("346 kg") just above it; segment labels sit inside
+    the rectangles. Bars with a negative total (a waterfall's reductions) use the median scale of the others."""
+
+    def center(line):
+        return (line.bbox[0] + line.bbox[2]) / 2, (line.bbox[1] + line.bbox[3]) / 2
+
+    bars = []
+    for x0, x1, segments in _bar_columns(pdf_path, page.number):
+        top = segments[0][0]
+        above = sorted(
+            (l for l in page.lines if x0 - 5 <= center(l)[0] <= x1 + 5 and 0 <= top - l.bbox[3] < 45),
+            key=lambda l: l.bbox[1],
+        )
+        total_line = next((l for l in above if _TOTAL.fullmatch(l.text)), None)
+        if total_line is None:
+            continue
+        amount, unit = _TOTAL.fullmatch(total_line.text).groups()
+        labelled = []
+        refs = {r.n for l in above for r in l.refs}
+        for y0, y1 in segments:
+            inside = [l for l in page.lines if x0 <= center(l)[0] <= x1 and y0 <= center(l)[1] <= y1]
+            refs |= {r.n for l in inside for r in l.refs}
+            labelled.append((" ".join(l.text for l in inside) or "unlabelled segment", y1 - y0))
+        title = " ".join(l.text for l in above if l is not total_line)
+        bars.append((title, total_line.text, _to_number(amount), unit, labelled, sorted(refs)))
+    scales = [total / sum(h for _, h in segs) for _, _, total, _, segs, _ in bars if total > 0]
+    if not scales:
+        return []
+    blocks = []
+    for title, total_text, total, unit, segs, refs in bars:
+        height = sum(h for _, h in segs)
+        scale = total / height if total > 0 else statistics.median(scales)
+        values = []
+        for label, h in segs:
+            value = {"label": label, "value": f"{h * scale:.0f}", "unit": unit, "estimated": False}
+            if total > 0:
+                value["share"] = round(100 * h / height)
+            values.append(value)
+        blocks.append({"kind": "chart", "title": "", "markdown": f"{title}: {total_text}", "values": values,
+                       "footnote_refs": refs, "measured": True})
+    return blocks
+
+
 def block_content(block: dict) -> str:
     parts = [block["title"], block["markdown"]]
-    if block["values"] and block["kind"] == "chart":
+    if block["values"] and block.get("measured"):
+        items = [f"{v['label']}: {v['value']} {v['unit']}" + (f" ({v['share']}%)" if "share" in v else "") for v in block["values"]]
+        parts.append(f"Values {MEASURED}: " + "; ".join(items))
+    elif block["values"] and block["kind"] == "chart":
         parts.append(
             "Values: "
             + "; ".join(
@@ -118,6 +200,9 @@ def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
         page_numbers = numbers(" ".join(l.text for l in raw.get(page.number, page).lines))
         endnotes = page.number in spec.endnote_pages
         first_paragraph, first_chunk = len(paragraphs[current.key]), len(chunks)
+        measured = measure_bars(spec.path, page)
+        if measured:  # exact values from the vector shapes beat the model's estimates
+            blocks = [b for b in blocks if b["kind"] != "chart"] + measured
         for block in blocks:
             if endnotes and block["kind"] != "table":
                 continue  # endnote text is already indexed as footnote chunks by the pipeline
@@ -132,7 +217,7 @@ def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
                 if text:
                     paragraphs[current.key].append(Paragraph(text, page.number, tuple(Ref(page.number, n, len(text)) for n in block["footnote_refs"])))
             else:
-                metadata = {"estimated": True} if any(v["estimated"] for v in block["values"]) else {}
+                metadata = {"measured": True} if block.get("measured") else {"estimated": True} if any(v["estimated"] for v in block["values"]) else {}
                 chunks.append(ChunkDraft(current.key, block["kind"], block_content(block), page.number, page.number, refs=refs, metadata=metadata))
         if not endnotes:
             indices = list(range(first_paragraph, len(paragraphs[current.key])))

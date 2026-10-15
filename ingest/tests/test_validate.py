@@ -181,7 +181,7 @@ def store_imac_like(conn, slug, energy_footnote=True):
         ChunkDraft("cf", "table", "| Product use | 45% |", 10, 10),
         ChunkDraft("en", "table", "| Sleep | 0.56W | 0.57W | 0.59W |", 12, 12),
     ]
-    chunks += [ChunkDraft("cf", "chart", f"Values: Use: 130 kg (approximate, read from chart) {i}", 2, 2) for i in range(3)]
+    chunks += [ChunkDraft("cf", "chart", f"Values (measured from the chart's shapes): Use: 156 kg (45%) {i}", 2, 2) for i in range(3)]
     chunks += [ChunkDraft("cf", "callout", f"76% recycled content {i}", 6, 6) for i in range(3)]
     chunks += [ChunkDraft("en", "footnote", f"Footnote {i}: text", 11, 11) for i in range(1, 20)]
     store_document(

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from chunk.visual import APPROXIMATE, block_content, build, page_title, table_notes, verify
+from chunk.visual import APPROXIMATE, MEASURED, block_content, build, measure_bars, page_title, table_notes, verify
 from enrich.vision import clean_block
 from helpers import page_of
 from model import Note
@@ -83,7 +83,7 @@ def test_charts_tables_and_callouts_are_their_own_chunks(imac):
     carbon = next(c for c in chunks if c.kind == "table" and "Total product footprint" in c.content)
     assert "| Total product footprint | 346 kg CO2e |" in carbon.content and "45%" in carbon.content
     chart = next(c for c in chunks if c.kind == "chart" and "Baseline emissions: 445 kg" in c.content)
-    assert APPROXIMATE in chart.content and chart.metadata == {"estimated": True}
+    assert MEASURED in chart.content and chart.metadata == {"measured": True}
 
 
 def test_footnote_markers_become_refs_not_text(imac):
@@ -133,3 +133,34 @@ def test_every_text_layer_marker_reaches_a_chunk_on_its_page(imac):
         assert expected <= cited, (page.number, expected - cited)
     claim = next(c for c in result.chunks if c.page_start == 5 and "Zero Waste" in c.content)
     assert (5, 16) in claim.refs
+
+
+def test_vector_bars_are_measured_against_their_printed_totals(imac):
+    bars = measure_bars(DOCS["imac"].path, page_of(imac[2].pages, 2))
+    assert [b["markdown"] for b in bars] == ["Baseline emissions: 445 kg", "Emissions reductions: –99 kg", "iMac emissions: 346 kg"]
+    assert [b["footnote_refs"] for b in bars] == [[7], [8, 9], [10]]
+    imac_bar = {v["label"]: (v["value"], v.get("share")) for v in bars[2]["values"]}
+    assert imac_bar == {
+        "Materials and process emissions": ("132", 38),
+        "Electricity for manufacturing": ("43", 13),
+        "Electricity for product use": ("156", 45),
+        "Transportation": ("14", 4),
+    }
+    reductions = {v["label"]: v["value"] for v in bars[1]["values"]}
+    assert (reductions["Recycled and low-carbon materials"], reductions["Low-carbon electricity"], reductions["Non-air shipping"]) == ("58", "22", "19")
+
+
+def test_measured_charts_replace_the_vision_estimates(imac):
+    charts = [c for c in imac[0].chunks if c.kind == "chart" and c.page_start == 2]
+    assert len(charts) == 3 and not [c for c in charts if APPROXIMATE in c.content]
+    assert "Electricity for product use: 156 kg (45%)" in next(c.content for c in charts if "iMac emissions: 346 kg" in c.content)
+    assert not [w for w in imac[0].warnings if "chart value" in w]  # measured values are not model readings
+
+
+def test_vision_estimates_that_miss_the_printed_total_are_dropped():
+    chart = {"kind": "chart", "title": "", "markdown": "iMac emissions: 346 kg", "footnote_refs": [],
+             "values": [{"label": "Use", "value": "194", "unit": "kg", "estimated": True},
+                        {"label": "Materials", "value": "172", "unit": "kg", "estimated": True}]}
+    fixed, warnings = verify(chart, {"346"}, 2)
+    assert fixed["values"] == []
+    assert warnings == ["p2: chart estimates sum to 366 vs printed 346; values dropped"]
