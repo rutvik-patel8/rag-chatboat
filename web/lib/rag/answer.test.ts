@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answer, type ChatEvent, type Deps } from "@/lib/rag/answer";
+import { answer, refusal, type ChatEvent, type Deps } from "@/lib/rag/answer";
 import type { Catalog } from "@/lib/rag/router";
 import { candidate } from "@/lib/rag/testing";
 
@@ -90,5 +90,14 @@ describe("answer", () => {
     const events: ChatEvent[] = [];
     await answer({ question: "and for that region?", scope: "gep", history: [{ role: "user", content: "hi" }] }, d, (e) => events.push(e));
     expect(d.searches[0]).toMatchObject({ paths: ["Ch. 2 Regional Outlooks › South Asia"] });
+  });
+});
+
+describe("refusal", () => {
+  it("names the document alone when the closest text sits outside any section", () => {
+    const closest = [candidate(1, { docTitle: "iMac Report", sectionPath: "" }), candidate(2, { docTitle: "iMac Report" })];
+    expect(refusal("imac", { imac: { title: "iMac Report", sections: [] } }, closest)).toBe(
+      "I couldn't find this in iMac Report. Closest sections: iMac Report; iMac Report › Ch. 2 Regional Outlooks › South Asia.",
+    );
   });
 });

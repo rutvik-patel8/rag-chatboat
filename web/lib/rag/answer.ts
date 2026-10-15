@@ -1,4 +1,4 @@
-import { buildBlocks, formatSources, type SourceBlock } from "@/lib/rag/context";
+import { buildBlocks, formatSources, sectionLabel, type SourceBlock } from "@/lib/rag/context";
 import { SYSTEM_PROMPT, userPrompt } from "@/lib/rag/prompt";
 import { selectRelevant } from "@/lib/rag/rerank";
 import type { Candidate, SearchArgs } from "@/lib/rag/retrieve";
@@ -31,7 +31,7 @@ export type Deps = {
 
 export function refusal(scope: Scope, catalog: Catalog, candidates: Candidate[]): string {
   const where = scope === "all" ? "the documents" : catalog[scope]?.title ?? scope;
-  const closest = [...new Set(candidates.map((c) => `${c.docTitle} › ${c.sectionPath}`))].slice(0, 3);
+  const closest = [...new Set(candidates.map((c) => sectionLabel(c.docTitle, c.sectionPath)))].slice(0, 3);
   return `I couldn't find this in ${where}.` + (closest.length ? ` Closest sections: ${closest.join("; ")}.` : "");
 }
 

@@ -30,6 +30,11 @@ export async function loadNeighbours(pool: Pool, picked: Candidate[]): Promise<M
   return new Map(rows.map((row) => [`${row.section_id}:${row.seq}`, row]));
 }
 
+/** "Doc › Section", or the document alone for text before the first heading (empty path). */
+export function sectionLabel(docTitle: string, sectionPath: string): string {
+  return sectionPath ? `${docTitle} › ${sectionPath}` : docTitle;
+}
+
 export function buildBlocks(picked: Candidate[], neighbours: Map<string, Neighbour>, budget = CONTEXT_CHARS): SourceBlock[] {
   const used = new Set(picked.map((c) => c.id));
   const blocks: SourceBlock[] = [];
@@ -56,7 +61,7 @@ export function buildBlocks(picked: Candidate[], neighbours: Map<string, Neighbo
     const pages = pageStart === pageEnd ? `p.${pageStart}` : `p.${pageStart}-${pageEnd}`;
     const id = blocks.length + 1;
     blocks.push({
-      id, label: `[S${id}] ${c.docTitle} › ${c.sectionPath} | ${pages} | ${c.kind}`, text,
+      id, label: `[S${id}] ${sectionLabel(c.docTitle, c.sectionPath)} | ${pages} | ${c.kind}`, text,
       docSlug: c.docSlug, sectionPath: c.sectionPath, pageStart, pageEnd, kind: c.kind, chunkIds: parts.map((p) => p.id),
     });
   }

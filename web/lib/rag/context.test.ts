@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBlocks, formatSources } from "@/lib/rag/context";
+import { buildBlocks, formatSources, sectionLabel } from "@/lib/rag/context";
 import { candidate } from "@/lib/rag/testing";
 
 describe("buildBlocks", () => {
@@ -25,5 +25,14 @@ describe("buildBlocks", () => {
     expect(blocks.map((b) => b.chunkIds)).toEqual([[5], [6]]);
     expect(blocks[0].text).toContain("Footnotes:\n18. ENERGY STAR rules.");
     expect(formatSources(blocks)).toContain("\n\n---\n\n[S2]");
+  });
+});
+
+describe("sectionLabel", () => {
+  it("names the document alone for text outside any section", () => {
+    expect(sectionLabel("iMac Report", "")).toBe("iMac Report");
+    expect(sectionLabel("GEP", "Ch. 3")).toBe("GEP › Ch. 3");
+    const [block] = buildBlocks([candidate(5, { docTitle: "iMac Report", sectionPath: "" })], new Map());
+    expect(block.label).toBe("[S1] iMac Report | p.96 | text");
   });
 });
