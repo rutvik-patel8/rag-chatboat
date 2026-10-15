@@ -38,3 +38,10 @@ def test_out_of_range_dim_is_rejected():
 def test_embed_rate_limit_defaults_to_free_tier_and_can_be_raised():
     assert load_settings(VALID).embed_per_minute == 100
     assert load_settings({**VALID, "EMBED_REQUESTS_PER_MINUTE": "1500"}).embed_per_minute == 1500
+
+
+def test_chat_rate_limit_defaults_to_ten_and_rejects_nonsense():
+    assert load_settings(VALID).chat_per_minute == 10
+    assert load_settings({**VALID, "GEMINI_CHAT_REQUESTS_PER_MINUTE": "60"}).chat_per_minute == 60
+    with pytest.raises(ConfigError, match="GEMINI_CHAT_REQUESTS_PER_MINUTE"):
+        load_settings({**VALID, "GEMINI_CHAT_REQUESTS_PER_MINUTE": "0"})

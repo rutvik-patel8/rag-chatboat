@@ -110,3 +110,30 @@ def make_client(settings: Settings) -> genai.Client:
 
 def make_embedder(settings: Settings) -> Embedder:
     return Embedder(make_client(settings), settings.embed_model, settings.embed_dim, limiter=RateLimiter(settings.embed_per_minute))
+
+
+class Generator:
+    """Text generation for ingest-time enrichment (section summaries)."""
+
+    def __init__(self, client, model: str, sleep: Callable[[float], None] = time.sleep, limiter: RateLimiter | None = None):
+        self._client = client
+        self._model = model
+        self._sleep = sleep
+        self._limiter = limiter
+
+    def generate(self, prompt: str) -> str:
+        if self._limiter is not None:
+            self._limiter.acquire(1)
+        config = types.GenerateContentConfig(temperature=0.2)
+        response = with_retry(
+            lambda: self._client.models.generate_content(model=self._model, contents=prompt, config=config),
+            sleep=self._sleep,
+        )
+        text = (response.text or "").strip()
+        if not text:
+            raise RuntimeError(f"{self._model} returned no text")
+        return text
+
+
+def make_generator(settings: Settings) -> Generator:
+    return Generator(make_client(settings), settings.chat_model, limiter=RateLimiter(settings.chat_per_minute))

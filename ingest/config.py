@@ -24,6 +24,7 @@ class Settings:
     embed_model: str
     embed_dim: int
     embed_per_minute: int = 100  # Gemini free tier counts each embedded text as one request
+    chat_per_minute: int = 10  # generation calls (section summaries); raise on a paid plan
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -39,14 +40,21 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"EMBED_DIM must be an integer, got {env['EMBED_DIM']!r}") from None
     if not 128 <= dim <= 3072:
         raise ConfigError(f"EMBED_DIM must be between 128 and 3072, got {dim}")
-    per_minute_raw = env.get("EMBED_REQUESTS_PER_MINUTE", "").strip() or "100"
-    if not per_minute_raw.isdigit() or int(per_minute_raw) < 1:
-        raise ConfigError(f"EMBED_REQUESTS_PER_MINUTE must be a positive integer, got {per_minute_raw!r}")
+    embed_per_minute = _positive_int(env, "EMBED_REQUESTS_PER_MINUTE", 100)
+    chat_per_minute = _positive_int(env, "GEMINI_CHAT_REQUESTS_PER_MINUTE", 10)
     return Settings(
         gemini_api_key=env["GEMINI_API_KEY"].strip(),
         database_url=env["DATABASE_URL"].strip(),
         chat_model=env["GEMINI_CHAT_MODEL"].strip(),
         embed_model=env["GEMINI_EMBED_MODEL"].strip(),
         embed_dim=dim,
-        embed_per_minute=int(per_minute_raw),
+        embed_per_minute=embed_per_minute,
+        chat_per_minute=chat_per_minute,
     )
+
+
+def _positive_int(env: Mapping[str, str], name: str, default: int) -> int:
+    raw = env.get(name, "").strip() or str(default)
+    if not raw.isdigit() or int(raw) < 1:
+        raise ConfigError(f"{name} must be a positive integer, got {raw!r}")
+    return int(raw)

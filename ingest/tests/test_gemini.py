@@ -160,3 +160,45 @@ def test_embedder_asks_the_limiter_before_each_batch():
     embedder = Embedder(SimpleNamespace(models=models), "gemini-embedding-001", 4, sleep=lambda s: None, limiter=limiter)
     embedder.embed([f"t{i}" for i in range(150)], "RETRIEVAL_DOCUMENT")
     assert limiter.asked == [100, 50]
+
+
+class FakeGenModels:
+    def __init__(self, texts=("A summary.",), failures=()):
+        self.texts = list(texts)
+        self.failures = list(failures)
+        self.calls = []
+
+    def generate_content(self, *, model, contents, config):
+        self.calls.append(SimpleNamespace(model=model, contents=contents, config=config))
+        if self.failures:
+            raise self.failures.pop(0)
+        return SimpleNamespace(text=self.texts.pop(0))
+
+
+def test_generator_returns_stripped_text_at_low_temperature():
+    from gemini import Generator
+
+    models = FakeGenModels(texts=["  Growth slows.  "])
+    generator = Generator(SimpleNamespace(models=models), "gemini-3.8-flash", sleep=lambda s: None)
+    assert generator.generate("Summarize") == "Growth slows."
+    assert models.calls[0].model == "gemini-3.8-flash"
+    assert models.calls[0].config.temperature == 0.2
+
+
+def test_generator_rejects_empty_answers():
+    from gemini import Generator
+
+    generator = Generator(SimpleNamespace(models=FakeGenModels(texts=[None])), "m", sleep=lambda s: None)
+    with pytest.raises(RuntimeError, match="no text"):
+        generator.generate("x")
+
+
+def test_generator_waits_out_rate_limits_and_asks_the_limiter():
+    from gemini import Generator
+
+    sleeps, asked = [], []
+    models = FakeGenModels(failures=[FakeApiError(429)])
+    generator = Generator(SimpleNamespace(models=models), "m", sleep=sleeps.append, limiter=SimpleNamespace(acquire=asked.append))
+    assert generator.generate("x") == "A summary."
+    assert sleeps == [15.0]
+    assert asked == [1]
