@@ -162,3 +162,11 @@ def test_sub_headings_in_other_blues_open_sections(built):
     assert "BOX 2.1 Low-income countries: Recent developments and outlook › Recent developments" in " ".join(
         s.path for s in built[0].sections
     )
+
+
+def test_forecast_headers_are_aligned_and_revisions_labelled(built):
+    result, by_key, _ = built
+    annex = [c.content for c in result.chunks if c.kind == "table" and by_key[c.section_key].path == "Statistical Annex › Real GDP growth"]
+    assert annex and all("\n|  | 2023 | 2024 | 2025e | 2026f |" in t for t in annex)
+    sar = [c.content for c in result.chunks if c.kind == "table" and c.content.startswith("TABLE 2.9 ")]
+    assert sar and all("2026f (change vs January 2026 projections)" in t for t in sar)

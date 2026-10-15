@@ -116,6 +116,21 @@ def figure_text(title: str, lines: list[Line], layout: GepLayout) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def label_revision_columns(rows: list[list[str]], header_index: int) -> list[list[str]]:
+    """Forecast tables repeat "2026f | 2027f" for the percentage-point differences from the previous edition;
+    label the repeats so they cannot be read as forecasts."""
+    above = " ".join(cell for row in rows[:header_index] for cell in row)
+    above = re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", " ", above))
+    match = re.search(r"differences\s+from\s+(.+?projections)", above)
+    note = f"change vs {match.group(1)}" if match else "revision"
+    seen: set[str] = set()
+    header = []
+    for cell in rows[header_index]:
+        header.append(f"{cell} ({note})" if cell and cell in seen else cell)
+        seen.add(cell)
+    return rows[:header_index] + [header] + rows[header_index + 1 :]
+
+
 def table_pieces(title: str, lines: list[Line], page: Page, layout: GepLayout) -> tuple[list[str], str]:
     cells = [l for l in lines if (_main(l).font, round(_main(l).size, 1)) != layout.note_text]
     notes = " ".join(l.text for l in lines if (_main(l).font, round(_main(l).size, 1)) == layout.note_text)
@@ -123,6 +138,7 @@ def table_pieces(title: str, lines: list[Line], page: Page, layout: GepLayout) -
     if rows and rows[0] and rows[0][0].replace(" ", "").startswith(title.replace(" ", "")[:12]):
         rows = rows[1:]  # the title itself was captured as the first row
     header_rows = next((i + 1 for i, row in enumerate(rows) if "2026f" in row), 1)
+    rows = label_revision_columns(rows, header_rows - 1)
     budget = TABLE_TOKENS - count_tokens(title) - 10
     pieces = [f"{title}\n\n{md}" for md in split_table(rows, header_rows, budget, count_tokens)]
     return pieces, (f"{title}\n\n{notes}" if notes else "")

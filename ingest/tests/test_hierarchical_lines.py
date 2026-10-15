@@ -70,6 +70,17 @@ def test_south_asia_forecast_table(gep_prepared):
     pieces, notes = table_pieces("TABLE 2.9 South Asia forecast summary", members, page, GEP_LAYOUT)
     assert len(pieces) >= 2
     assert all(p.startswith("TABLE 2.9 South Asia forecast summary\n\n") for p in pieces)
-    assert all("|  | 2023 | 2024 | 2025e | 2026f | 2027f | 2028f | 2026f | 2027f |" in p for p in pieces)
+    revision = "(change vs January 2026 projections)"
+    assert all(f"|  | 2023 | 2024 | 2025e | 2026f | 2027f | 2028f | 2026f {revision} | 2027f {revision} |" in p for p in pieces)
     assert "| EMDE SAR, GDP | 6.6 | 6.8 | 7.0 | 6.3 | 6.9 | 7.1 | 0.1 | 0.4 |" in pieces[0]
     assert notes.startswith("TABLE 2.9 South Asia forecast summary\n\n")
+
+
+def test_repeated_year_columns_are_labelled_as_revisions():
+    from chunk.hierarchical import label_revision_columns
+
+    rows = [["Percentage-point differences", "from January 2026 projections"], ["", "2025e", "2026f", "2027f", "2026f", "2027f"]]
+    assert label_revision_columns(rows, 1)[1] == [
+        "", "2025e", "2026f", "2027f",
+        "2026f (change vs January 2026 projections)", "2027f (change vs January 2026 projections)",
+    ]
