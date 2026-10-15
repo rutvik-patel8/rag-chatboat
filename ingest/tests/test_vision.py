@@ -49,3 +49,8 @@ def test_describer_caches_by_page_image(tmp_path):
     assert first == again == [
         {"kind": "callout", "title": "", "markdown": "100% of the packaging is fiber-based", "values": [], "footnote_refs": [3]}
     ]
+
+
+def test_marker_stripping_leaves_decimals_alone():
+    assert strip_markers("Power adapter efficiency 91.1% and 1.5 kg", {1, 5}) == "Power adapter efficiency 91.1% and 1.5 kg"
+    assert strip_markers("requirement for ENERGY STAR.^18 Apple.7 emissions7", {7, 18}) == "requirement for ENERGY STAR. Apple. emissions"

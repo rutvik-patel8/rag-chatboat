@@ -76,7 +76,8 @@ def _join_wrapped_rows(markdown: str) -> str:
 def strip_markers(text: str, refs: set[int]) -> str:
     """Models often write a listed footnote marker as plain digits glued to a word: "emissions7", "STAR.^18"."""
     for n in sorted(refs, reverse=True):
-        text = re.sub(rf"(?<=[A-Za-z.)\]])\^?{n}\b", "", text)
+        # after a letter or bracket, optionally behind a full stop ("STAR.^18") — never after a digit ("91.1%")
+        text = re.sub(rf"(?<=[A-Za-z)\]])(\.?)\^?{n}\b", r"\1", text)
     return text
 
 
