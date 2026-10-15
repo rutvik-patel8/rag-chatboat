@@ -94,7 +94,7 @@ def merge_symbol_cells(rows: list[list[str]], symbols: tuple[str, ...] = ("$",))
     return merged
 
 
-_NUMERIC_CELL = re.compile(r"[\d$,.()%-]+")
+_NUMERIC_CELL = re.compile(r"[\d$,.()%-]+(?:[A-Za-z]\d*)?")  # 2018, $644,807, 2026f, 24Q4
 
 
 def pad_numeric_rows(rows: list[list[str]]) -> list[list[str]]:

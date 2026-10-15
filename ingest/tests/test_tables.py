@@ -69,3 +69,10 @@ def test_short_numeric_header_rows_align_right():
 
     rows = [["(Dollars in Thousands)"], ["2018", "2017"], ["Inventory", "57,369", "52,984"]]
     assert pad_numeric_rows(rows) == [["(Dollars in Thousands)"], ["", "2018", "2017"], ["Inventory", "57,369", "52,984"]]
+
+
+def test_year_cells_with_suffixes_count_as_numeric():
+    from parse.tables import pad_numeric_rows
+
+    rows = [["TABLE 2.9"], ["2023", "2025e", "2026f", "24Q4"], ["World", "2.8", "2.9", "2.5", "3.1"]]
+    assert pad_numeric_rows(rows)[1] == ["", "2023", "2025e", "2026f", "24Q4"]
