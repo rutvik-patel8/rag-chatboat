@@ -10,6 +10,7 @@ import httpx
 from google import genai
 from google.genai import types
 
+from chunk.common import count_tokens
 from config import Settings
 
 TaskType = Literal["RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY"]
@@ -75,25 +76,54 @@ class RateLimiter:
 
 
 class Embedder:
-    def __init__(self, client, model: str, dim: int, sleep: Callable[[float], None] = time.sleep, limiter: RateLimiter | None = None):
+    def __init__(
+        self,
+        client,
+        model: str,
+        dim: int,
+        sleep: Callable[[float], None] = time.sleep,
+        limiter: RateLimiter | None = None,
+        token_limiter: RateLimiter | None = None,
+        count: Callable[[str], int] = count_tokens,
+    ):
         self._client = client
         self._model = model
         self._dim = dim
         self._sleep = sleep
-        self._limiter = limiter
+        self._limiter = limiter  # texts per minute
+        self._token_limiter = token_limiter  # tokens per minute; also caps one batch's size
+        self._count = count
 
     def embed(self, texts: Sequence[str], task_type: TaskType) -> list[list[float]]:
         if any(not text.strip() for text in texts):
             raise ValueError("cannot embed empty text")
         vectors: list[list[float]] = []
-        for start in range(0, len(texts), BATCH_SIZE):
-            vectors.extend(self._embed_batch(list(texts[start : start + BATCH_SIZE]), task_type))
+        for batch, tokens in self._batches(texts):
+            vectors.extend(self._embed_batch(batch, tokens, task_type))
         return vectors
 
-    def _embed_batch(self, batch: list[str], task_type: TaskType) -> list[list[float]]:
+    def _batches(self, texts: Sequence[str]) -> list[tuple[list[str], int]]:
+        budget = self._token_limiter.per_minute if self._token_limiter is not None else math.inf
+        batches: list[tuple[list[str], int]] = []
+        current: list[str] = []
+        tokens = 0
+        for text in texts:
+            n = self._count(text)
+            if current and (len(current) == BATCH_SIZE or tokens + n > budget):
+                batches.append((current, tokens))
+                current, tokens = [], 0
+            current.append(text)
+            tokens += n
+        if current:
+            batches.append((current, tokens))
+        return batches
+
+    def _embed_batch(self, batch: list[str], tokens: int, task_type: TaskType) -> list[list[float]]:
         config = types.EmbedContentConfig(task_type=task_type, output_dimensionality=self._dim)
         if self._limiter is not None:
             self._limiter.acquire(len(batch))
+        if self._token_limiter is not None:
+            self._token_limiter.acquire(min(tokens, self._token_limiter.per_minute))
         response = with_retry(
             lambda: self._client.models.embed_content(model=self._model, contents=batch, config=config),
             sleep=self._sleep,
@@ -109,7 +139,13 @@ def make_client(settings: Settings) -> genai.Client:
 
 
 def make_embedder(settings: Settings) -> Embedder:
-    return Embedder(make_client(settings), settings.embed_model, settings.embed_dim, limiter=RateLimiter(settings.embed_per_minute))
+    return Embedder(
+        make_client(settings),
+        settings.embed_model,
+        settings.embed_dim,
+        limiter=RateLimiter(settings.embed_per_minute),
+        token_limiter=RateLimiter(settings.embed_tokens_per_minute),
+    )
 
 
 class Generator:
@@ -135,5 +171,5 @@ class Generator:
         return text
 
 
-def make_generator(settings: Settings) -> Generator:
-    return Generator(make_client(settings), settings.chat_model, limiter=RateLimiter(settings.chat_per_minute))
+def make_generator(settings: Settings, model: str | None = None) -> Generator:
+    return Generator(make_client(settings), model or settings.chat_model, limiter=RateLimiter(settings.chat_per_minute))

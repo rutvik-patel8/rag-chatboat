@@ -24,7 +24,9 @@ class Settings:
     embed_model: str
     embed_dim: int
     embed_per_minute: int = 100  # Gemini free tier counts each embedded text as one request
+    embed_tokens_per_minute: int = 20000  # free tier refuses ~25–30k embedding tokens in one minute
     chat_per_minute: int = 10  # generation calls (section summaries); raise on a paid plan
+    summary_model: str = ""  # model for ingest-time summaries; empty means chat_model
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -42,6 +44,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         raise ConfigError(f"EMBED_DIM must be between 128 and 3072, got {dim}")
     embed_per_minute = _positive_int(env, "EMBED_REQUESTS_PER_MINUTE", 100)
     chat_per_minute = _positive_int(env, "GEMINI_CHAT_REQUESTS_PER_MINUTE", 10)
+    embed_tokens_per_minute = _positive_int(env, "EMBED_TOKENS_PER_MINUTE", 20000)
     return Settings(
         gemini_api_key=env["GEMINI_API_KEY"].strip(),
         database_url=env["DATABASE_URL"].strip(),
@@ -49,7 +52,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         embed_model=env["GEMINI_EMBED_MODEL"].strip(),
         embed_dim=dim,
         embed_per_minute=embed_per_minute,
+        embed_tokens_per_minute=embed_tokens_per_minute,
         chat_per_minute=chat_per_minute,
+        summary_model=env.get("GEMINI_SUMMARY_MODEL", "").strip() or env["GEMINI_CHAT_MODEL"].strip(),
     )
 
 

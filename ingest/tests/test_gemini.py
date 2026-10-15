@@ -202,3 +202,27 @@ def test_generator_waits_out_rate_limits_and_asks_the_limiter():
     assert generator.generate("x") == "A summary."
     assert sleeps == [15.0]
     assert asked == [1]
+
+
+def test_make_generator_can_target_another_model():
+    from config import Settings
+    from gemini import make_generator
+
+    settings = Settings("k", "postgresql://x", "gemini-3.8-flash", "gemini-embedding-001", 768)
+    assert make_generator(settings)._model == "gemini-3.8-flash"
+    assert make_generator(settings, "gemini-3.5-flash-lite")._model == "gemini-3.5-flash-lite"
+
+
+def test_embedder_keeps_each_batch_within_the_token_budget():
+    asked_texts, asked_tokens = [], []
+    models = FakeModels(4)
+    embedder = Embedder(
+        SimpleNamespace(models=models), "gemini-embedding-001", 4, sleep=lambda s: None,
+        limiter=SimpleNamespace(acquire=asked_texts.append),
+        token_limiter=SimpleNamespace(acquire=asked_tokens.append, per_minute=10),
+        count=lambda text: 4,
+    )
+    embedder.embed([f"t{i}" for i in range(5)], "RETRIEVAL_DOCUMENT")
+    assert [len(c.contents) for c in models.calls] == [2, 2, 1]
+    assert asked_texts == [2, 2, 1]
+    assert asked_tokens == [8, 8, 4]
