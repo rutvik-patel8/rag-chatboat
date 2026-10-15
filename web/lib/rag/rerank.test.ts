@@ -24,6 +24,13 @@ describe("rerank", () => {
     expect(seen[0].config).toMatchObject({ temperature: 0, responseMimeType: "application/json" });
   });
 
+  it("passes the request's abort signal to the model call", async () => {
+    const seen: { config?: Record<string, unknown> }[] = [];
+    const stop = new AbortController();
+    await rerank(fakeClient('{"scores":[]}', seen), "lite", "q", [candidate(1)], stop.signal);
+    expect(seen[0].config?.abortSignal).toBe(stop.signal);
+  });
+
   it("shows each passage's id, location and text", () => {
     const prompt = rerankPrompt("Growth in South Asia?", [candidate(7, { content: "Growth in SAR is expected to soften." })]);
     expect(prompt).toContain("[7] Global Economic Prospects › Ch. 2 Regional Outlooks › South Asia (p.96, text)\nGrowth in SAR is expected to soften.");

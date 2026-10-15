@@ -43,6 +43,7 @@ describe("answer", () => {
     expect(d.searches[0]).toMatchObject({ docs: ["gep"], paths: ["Ch. 2 Regional Outlooks › South Asia"], vector: [0.1, 0.2] });
     const sources = events[0] as Extract<ChatEvent, { type: "sources" }>;
     expect(sources.sources.map((s) => s.id)).toEqual([1]);
+    expect(sources.sources[0]).toMatchObject({ slug: "gep", doc: "Global Economic Prospects", pageStart: 96, text: expect.stringContaining("6.3 percent") });
     const done = events.at(-1) as Extract<ChatEvent, { type: "done" }>;
     expect(done.warnings).toEqual([]);
     expect(done.debug.candidates.map((c) => c.rerank)).toEqual([3, 0]);
@@ -80,10 +81,10 @@ describe("answer", () => {
   it("reports a generation failure as an error event", async () => {
     const events = await run(deps({
       async *generate() {
-        throw new Error("quota exceeded");
+        throw new Error('{"error":{"code":429,"message":"Quota exceeded.","status":"RESOURCE_EXHAUSTED"}}');
       },
     }));
-    expect(events.at(-1)).toEqual({ type: "error", message: "answer generation failed: quota exceeded" });
+    expect(events.at(-1)).toEqual({ type: "error", message: "answer generation failed: Quota exceeded. (429 RESOURCE_EXHAUSTED)" });
   });
 
   it("rewrites follow-up questions before routing", async () => {

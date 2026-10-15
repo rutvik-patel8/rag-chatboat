@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmbedder, isRetryable, l2Normalize, MAX_BATCH, type EmbedClient } from "@/lib/rag/gemini";
+import { createEmbedder, isRetryable, l2Normalize, MAX_BATCH, withRetry, type EmbedClient } from "@/lib/rag/gemini";
 
 class FakeApiError extends Error {
   // Same shape as @google/genai's ApiError: a numeric `status`.
@@ -108,5 +108,21 @@ describe("isRetryable", () => {
 describe("l2Normalize", () => {
   it("rejects a zero vector", () => {
     expect(() => l2Normalize([0, 0])).toThrow();
+  });
+});
+
+describe("withRetry with an abort signal", () => {
+  const busy = () => Object.assign(new Error("busy"), { status: 503 });
+
+  it("does not call or retry once the caller has stopped", async () => {
+    let calls = 0;
+    const stopped = AbortSignal.abort(new Error("client disconnected"));
+    await expect(withRetry(async () => ++calls, { signal: stopped })).rejects.toThrow("client disconnected");
+    expect(calls).toBe(0);
+
+    const controller = new AbortController();
+    const sleep = async () => controller.abort(new Error("client disconnected"));
+    await expect(withRetry(async () => { calls++; throw busy(); }, { signal: controller.signal, sleep })).rejects.toThrow("client disconnected");
+    expect(calls).toBe(1);
   });
 });

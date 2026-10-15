@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/rag/health";
 import { buildBlocks, formatSources, sectionLabel, type SourceBlock } from "@/lib/rag/context";
 import { SYSTEM_PROMPT, userPrompt } from "@/lib/rag/prompt";
 import { selectRelevant } from "@/lib/rag/rerank";
@@ -7,7 +8,10 @@ import { verifyAnswer } from "@/lib/rag/verify";
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type ChatRequest = { question: string; scope: Scope; history: Turn[] };
-export type SourceInfo = { id: number; doc: string; sectionPath: string; pageStart: number; pageEnd: number; kind: string; snippet: string };
+export type SourceInfo = {
+  id: number; slug: string; doc: string; sectionPath: string; pageStart: number; pageEnd: number; kind: string; snippet: string;
+  text: string; // the whole block the model saw, for the sources drawer
+};
 export type Debug = {
   question: string;
   route: Route;
@@ -37,8 +41,8 @@ export function refusal(scope: Scope, catalog: Catalog, candidates: Candidate[])
 
 function sourceInfo(block: SourceBlock, docTitle: string): SourceInfo {
   return {
-    id: block.id, doc: docTitle, sectionPath: block.sectionPath, pageStart: block.pageStart, pageEnd: block.pageEnd,
-    kind: block.kind, snippet: block.text.slice(0, 300),
+    id: block.id, slug: block.docSlug, doc: docTitle, sectionPath: block.sectionPath, pageStart: block.pageStart,
+    pageEnd: block.pageEnd, kind: block.kind, snippet: block.text.slice(0, 300), text: block.text,
   };
 }
 
@@ -78,7 +82,7 @@ export async function answer(request: ChatRequest, deps: Deps, emit: (event: Cha
       emit({ type: "text", delta });
     }
   } catch (error) {
-    emit({ type: "error", message: `answer generation failed: ${error instanceof Error ? error.message : String(error)}` });
+    emit({ type: "error", message: `answer generation failed: ${errorMessage(error)}` });
     return;
   }
   warnings.push(...verifyAnswer(text, blocks));

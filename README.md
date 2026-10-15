@@ -54,3 +54,14 @@ curl -sN -X POST localhost:3100/api/chat -H 'content-type: application/json' \
 
 Answers use `GEMINI_CHAT_MODEL`; reranking and follow-up rewriting use `GEMINI_UTILITY_MODEL`
 (default: `GEMINI_SUMMARY_MODEL`, then the chat model).
+
+## Chat UI
+
+```bash
+cd web && npm run dev   # http://localhost:3100
+```
+
+Pick a document (or "All documents") and ask a question, or click one of the starter questions. `[S#]` chips open
+the sources drawer: the passage the answer used, its section and page, and an "Open page" link to the PDF.
+"Show retrieval" shows the router's filters and each candidate's vector, keyword and rerank scores; ⚠ marks figures
+the verifier could not find in the cited sources.

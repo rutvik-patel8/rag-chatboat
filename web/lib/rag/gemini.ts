@@ -11,18 +11,19 @@ export function isRetryable(err: unknown): boolean {
   return err instanceof TypeError; // fetch network failures surface as TypeError
 }
 
-type RetryOptions = { attempts?: number; baseDelayMs?: number; sleep?: (ms: number) => Promise<void> };
+type RetryOptions = { attempts?: number; baseDelayMs?: number; sleep?: (ms: number) => Promise<void>; signal?: AbortSignal };
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  { attempts = 3, baseDelayMs = 1000, sleep = realSleep }: RetryOptions = {},
+  { attempts = 3, baseDelayMs = 1000, sleep = realSleep, signal }: RetryOptions = {},
 ): Promise<T> {
   for (let attempt = 1; ; attempt++) {
+    signal?.throwIfAborted(); // the user stopped: spend no more calls
     try {
       return await fn();
     } catch (err) {
-      if (attempt >= attempts || !isRetryable(err)) throw err;
+      if (signal?.aborted || attempt >= attempts || !isRetryable(err)) throw err;
       await sleep(baseDelayMs * 2 ** (attempt - 1));
     }
   }

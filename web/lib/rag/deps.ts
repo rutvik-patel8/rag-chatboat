@@ -21,8 +21,11 @@ export function memoCatalog(load: () => Promise<Catalog>): () => Promise<Catalog
 
 const catalog = memoCatalog(() => loadCatalog(getPool()));
 
-/** Production wiring: Postgres, Gemini embeddings, the utility model for helpers and the chat model for answers. */
-export function productionDeps(): Deps {
+/**
+ * Production wiring: Postgres, Gemini embeddings, the utility model for helpers and the chat model for answers.
+ * `signal` (the client went away) cancels the Gemini calls of this request.
+ */
+export function productionDeps(signal?: AbortSignal): Deps {
   const env = getEnv();
   const client = getGenAI() as unknown as GenClient;
   const helper = utilityModel(env);
@@ -31,15 +34,15 @@ export function productionDeps(): Deps {
     condense: async (history, question) => {
       if (!history.length) return question;
       try {
-        return await generateText(client, helper, condensePrompt(history, question));
+        return await generateText(client, helper, condensePrompt(history, question), { signal });
       } catch {
         return question; // a failed rewrite should not block the answer
       }
     },
     embed: embedQuery,
     search: (args) => hybridSearch(getPool(), args),
-    rerank: (question, candidates) => rerank(client, helper, question, candidates),
+    rerank: (question, candidates) => rerank(client, helper, question, candidates, signal),
     neighbours: (picked) => loadNeighbours(getPool(), picked),
-    generate: (system, prompt) => streamText(client, env.GEMINI_CHAT_MODEL, system, prompt),
+    generate: (system, prompt) => streamText(client, env.GEMINI_CHAT_MODEL, system, prompt, { signal }),
   };
 }
