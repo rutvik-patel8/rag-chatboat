@@ -198,19 +198,14 @@ Probing showed the PDF's typography is a cleaner source of structure than its co
 
 ### 5.4 iMac — `visual` profile
 
-- Every page rendered at ~150 dpi PNG → Gemini vision with a JSON response schema:
-  ```json
-  {"blocks": [{"kind": "text|table|chart|callout",
-               "title": "string",
-               "markdown": "string",
-               "values": [{"label": "string", "value": "number|string", "unit": "string", "estimated": "boolean"}],
-               "footnote_refs": ["int"]}]}
-  ```
-- Prompt rules: transcribe exactly; tables as markdown; chart segments without printed values are estimated from bar proportions anchored on printed totals and flagged `estimated: true`; superscript digits are footnote refs, not part of numbers.
-- **Cross-check:** each non-estimated numeric value must appear in the page's text layer (after number normalization). On mismatch, text-layer value wins and a warning is logged. Estimated values are stored with the suffix `(approximate, read from chart)` and `metadata.estimated = true`.
-- Each block becomes one chunk of its `kind`; callouts stay small.
-- Endnotes (p11–12) parsed via the shared footnote step; the power-consumption table inside note 18 becomes a `kind=table` chunk with `footnotes: [{n: 18, …}]`.
-- Fallback: if vision fails after retries, that page uses text-layer chunks and the report flags it.
+- **Vision:** every page is rendered at 150 dpi and sent to Gemini (`GEMINI_VISION_MODEL`, default = the summary model; Flash-Lite in practice because of free-tier quotas) with a JSON schema: `{blocks: [{kind: text|table|chart|callout, title, markdown, values: [{label, value, unit, estimated}], footnote_refs: [n]}]}`. Answers are cached by model + prompt version + page-image hash, so reruns are free.
+- **Prompt rules:** transcribe exactly, in reading order; tables as markdown; chart segments without printed values are estimated from bar proportions anchored on printed totals and flagged `estimated: true`; superscript digits are footnote refs, not text.
+- **Cleanup** (the model does not always follow the rules): Unicode superscript digits and listed refs glued to a word ("emissions7", "STAR.^18") are removed from the text and recorded as refs; text is NFKC-normalized (`CO₂e` → `CO2e`); wrapped table rows are rejoined; a heading repeated in the markdown is dropped; `**bold**` markup is removed.
+- **Cross-check:** a chart value marked as printed that does not appear in the page's text layer is re-marked approximate (warning); table/callout numbers missing from the text layer are reported as warnings.
+- **Sections:** one per page title (the 24pt lines, e.g. "Progress toward carbon neutral", "Carbon Footprint"); consecutive pages with the same title (Endnotes p11–12) share a section.
+- **Chunks:** text blocks are packed per section (~400 tokens, 50 overlap); tables, charts and callouts are their own chunks. Chart content ends with `Values: label: value unit (approximate, read from chart); …` and estimated charts carry `metadata.estimated = true`.
+- **Endnote pages (11–12):** only table blocks are kept — note text is already indexed as footnote chunks. A table there is linked to the note whose text names at least two of its row labels (note 18's power-consumption table).
+- **Fallback:** if vision fails for a page, that page's text layer becomes ordinary paragraphs and the report carries a warning.
 
 ### 5.5 Caching and repeatability
 
@@ -297,7 +292,7 @@ Per question: **retrieval hit** (an expected page/section among final sources) �
 ## 9. Testing
 
 - **Python (pytest, offline)** — footnote linking (iMac p7 marker 18 → note 18 text) · boilerplate stripping · GEP line roles, reading order and section tree (six regions on their real pages, boxes, wrapped headings) · chunker invariants (no chunk crosses a section; size bounds; tables never split mid-row) · vision cross-check using fixture JSON · number normalization.
-- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106, the South Asia outlook text and Table 2.9 under South Asia, Executive Summary text, a Chapter 3 summary, BOX 1.1, ≥ 40 chart / ≥ 100 table / ≥ 30 summary chunks, and no reference-list text · iMac has table chunks containing `0.59W` and `45%` · GPO: the three brief facts sit in the expected chunks (166 libraries; govinfo deployment in the Acting Deputy Director's message; "$375 million" in text and "$375.7 million" in the By-the-Numbers table), a `› govinfo` section exists, ≥ 15 caption and ≥ 4 table chunks · every chunk has a non-empty embedding of `EMBED_DIM`.
+- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106, the South Asia outlook text and Table 2.9 under South Asia, Executive Summary text, a Chapter 3 summary, BOX 1.1, ≥ 40 chart / ≥ 100 table / ≥ 30 summary chunks, and no reference-list text · iMac: table chunks with `0.59W` and `45%`, an approximate chart chunk, the "58 percent less energy" text carrying footnote 18, "recycled aluminum in the stand", 19 footnote, ≥ 3 callout and ≥ 3 chart chunks · GPO: the three brief facts sit in the expected chunks (166 libraries; govinfo deployment in the Acting Deputy Director's message; "$375 million" in text and "$375.7 million" in the By-the-Numbers table), a `› govinfo` section exists, ≥ 15 caption and ≥ 4 table chunks · every chunk has a non-empty embedding of `EMBED_DIM`.
 - **TypeScript (vitest)** — router regexes · RRF fusion · number normalization and verifier · prompt/context assembly · one SQL integration test against the Docker DB.
 - **End-to-end** — the eval scorecard (§8) is the acceptance test.
 
