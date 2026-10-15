@@ -106,3 +106,60 @@ def test_gpo_checks_report_a_leaked_footer(conn):
     store_gpo_like(conn, "test-gpo", with_footer=True)
     failed = [r.name for r in (check(conn, "test-gpo") for check in DOC_CHECKS["gpo"]) if not r.ok]
     assert failed == ["no chunk with 'Financial Year In Review'"]
+
+GEP_REGIONS = [
+    ("eap", "East Asia and Pacific", 81, 83),
+    ("eca", "Europe and Central Asia", 84, 87),
+    ("lac", "Latin America and the Caribbean", 88, 91),
+    ("mna", "Middle East, North Africa, Afghanistan, and Pakistan", 92, 95),
+    ("sar", "South Asia", 96, 98),
+    ("ssa", "Sub-Saharan Africa", 99, 102),
+]
+
+
+def store_gep_like(conn, slug, regions=GEP_REGIONS):
+    settings = load_settings()
+    vec = [1.0] + [0.0] * (settings.embed_dim - 1)
+    ch2, ch1, ch3 = "Ch. 2 Regional Outlooks", "Ch. 1 Global Outlook", "Ch. 3 A Rising Challenge: Sovereign Debt"
+    sections = [
+        SectionDraft("root", "GEP", 0, "", 15, 191),
+        SectionDraft("es", "Executive Summary", 1, "Executive Summary", 19, 21, "root", "front"),
+        SectionDraft("c1", ch1, 1, ch1, 23, 62, "root"),
+        SectionDraft("b11", "BOX 1.1 How much will AI affect global growth?", 2, f"{ch1} › BOX 1.1 How much will AI affect global growth?", 30, 35, "c1", "box"),
+        SectionDraft("refs", "References", 2, f"{ch1} › References", 63, 63, "c1"),
+        SectionDraft("c2", ch2, 1, ch2, 69, 105, "root"),
+        SectionDraft("c3", ch3, 1, ch3, 107, 134, "root"),
+    ]
+    sections += [SectionDraft(key, title, 2, f"{ch2} › {title}", a, b, "c2", "region") for key, title, a, b in regions]
+    sections.append(SectionDraft("sar-out", "Outlook", 3, f"{ch2} › South Asia › Outlook", 96, 97, "sar"))
+    chunks = [
+        ChunkDraft("sar-out", "text", "Growth in SAR is expected to soften to 6.3 percent in 2026, mainly", 96, 96),
+        ChunkDraft("sar-out", "table", "TABLE 2.9 South Asia forecast summary\n\n| x |", 98, 98),
+        ChunkDraft("es", "text", "The global economy is facing another major shock.", 19, 19),
+        ChunkDraft("c3", "section_summary", f"Summary of {ch3}: debt.", 107, 134),
+    ]
+    chunks += [ChunkDraft("c1", "chart", f"FIGURE 1.{i}", 27, 27) for i in range(40)]
+    chunks += [ChunkDraft("c1", "table", f"TABLE 1.{i}", 26, 26) for i in range(100)]
+    chunks += [ChunkDraft("c1", "section_summary", f"Summary {i}", 23, 62) for i in range(29)]
+    store_document(
+        conn, DocumentMeta(slug, "GEP", "hierarchical", 200), sections, chunks,
+        [c.content for c in chunks], [vec] * len(chunks), settings.embed_model, settings.embed_dim,
+    )
+
+
+def test_gep_checks_pass_on_a_document_shaped_like_the_report(conn):
+    from validate import DOC_CHECKS
+
+    store_gep_like(conn, "test-gep")
+    results = [check(conn, "test-gep") for check in DOC_CHECKS["gep"]]
+    assert len(results) == 10
+    assert all(r.ok for r in results), [r for r in results if not r.ok]
+
+
+def test_gep_checks_report_a_misplaced_region(conn):
+    from validate import DOC_CHECKS
+
+    regions = [r if r[1] != "South Asia" else ("sar", "South Asia", 95, 98) for r in GEP_REGIONS[:5]]
+    store_gep_like(conn, "test-gep", regions=regions)
+    failed = [r.name for r in (check(conn, "test-gep") for check in DOC_CHECKS["gep"]) if not r.ok]
+    assert failed == ["6 region sections within p81–106"]

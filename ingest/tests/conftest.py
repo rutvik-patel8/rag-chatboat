@@ -27,3 +27,11 @@ def gpo_prepared():
     from profiles import DOCS
 
     return prepare(DOCS["gpo"])
+
+
+@pytest.fixture(scope="session")
+def gep_prepared():
+    from pipeline import prepare
+    from profiles import DOCS
+
+    return prepare(DOCS["gep"])

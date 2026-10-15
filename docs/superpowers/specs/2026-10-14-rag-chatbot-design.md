@@ -32,7 +32,7 @@ Build one question-answering chatbot over three PDFs whose structures differ on 
 These facts drove the design:
 
 - **GPO** — text layer extracts cleanly; photo captions (`(Above) …`) are interleaved with body text.
-- **GEP** — PDF bookmarks give the top-level tree (Executive Summary p19, Ch.1 p23, Ch.2 p69, six regions p81–99, Ch.3 p107, Ch.4 p143, Statistical Annex p185, Boxes 1.1/1.2/2.1/3.1). The printed Contents pages (PDF p9–17) list sub-sections with printed page numbers; printed page 1 = PDF page 23. Running headers repeat on every page (`CHAPTER 1`, `GLOBAL ECONOMIC PROSPECTS | JUNE 2026`).
+- **GEP** — PDF bookmarks give the top-level tree (Executive Summary p19, Ch.1 p23, Ch.2 p69, six regions p81–99 (the South Asia bookmark is one page early: p95, the region starts p96), Ch.3 p107, Ch.4 p143, Statistical Annex p185, Boxes 1.1/1.2/2.1/3.1). The printed Contents pages (PDF p9–17) list sub-sections with printed page numbers; printed page 1 = PDF page 23. Running headers repeat on every page (`CHAPTER 1`, `GLOBAL ECONOMIC PROSPECTS | JUNE 2026`).
 - **iMac** —
   - p2 carbon chart: only labels and totals extract (`445 kg`, `–99 kg`, `346 kg`); segment values exist only as bar heights.
   - p10 carbon table extracts as loose layout text: total 346 kg CO2e; production 50%, transportation 5%, product use 45%, end-of-life <1%.
@@ -181,20 +181,20 @@ Probing showed GPO marks headings by **font face and colour, not size** (narrati
 
 ### 5.3 GEP — `hierarchical` profile
 
-**Section tree**
-1. Bookmarks (`doc.get_toc()`) → top level: front matter, Executive Summary, Ch.1–4, Boxes, six regions, Statistical Annex.
-2. Parse printed Contents pages (PDF p9–17): lines `Title ……… <page>` with indentation level → sub-sections.
-3. Map printed → PDF pages using the offset learned from bookmarks (printed 1 = PDF 23); roman-numeral front matter mapped from bookmarks directly.
-4. Locate each heading on its PDF page by fuzzy match (normalized, ratio ≥ 0.85) to get its y-position; sections can start mid-page.
-5. Fill gaps with font-size heading detection inside leaf sections (e.g. `Recent developments`, `Outlook`, `Risks`).
-6. Boxes are their own sub-trees (`kind=box`); text inside a box's page/y-range belongs to the box, not the surrounding chapter.
+Probing showed the PDF's typography is a cleaner source of structure than its contents pages, and that **bookmarks are unreliable below chapter level** (the "South Asia" bookmark points to p95, but the region starts on p96). The tree therefore comes from bookmarks for chapters only and from heading styles for everything else:
 
-**Chunks**
-- Child chunks ~350 tokens, ~50 overlap, within one leaf section only.
-- `sections.content` holds each section's full text (parent context).
-- One `kind=section_summary` chunk per section with ≥ 300 tokens of text: Gemini-generated 3–5 sentence summary (~120 calls, cached).
-- Figures: caption + `Sources:` / `Note:` text → `kind=chart` chunk. No vision (profile switch `vision_pages: []`).
-- Tables (including Statistical Annex country forecast tables) via the shared table step.
+- **Skipped pages:** 1–14 (cover, copyright, contents) and 192–200 (publication lists, back cover).
+- **Reading order:** each page's lines are ordered left column then right column, top to bottom (lines wider than 55% of the page count as left). PDF stream order often starts with the right column or a heading block, which misfiled ~11% of lines before this rule.
+- **Level 1:** chapter bookmarks (`Ch. 1 Global Outlook` … `Ch. 4 …`, `Statistical Annex`) at their start pages, and front-matter titles in HelveticaLTStd-Cond 26pt (Acknowledgments, Foreword, Executive Summary, Abbreviations; `kind=front`).
+- **Level 2:** HelveticaLTStd-Bold 16pt (or 14pt — Ch. 2's "References") in any colour: chapter sections ("Summary", "Global context"), the six regions (`kind=region`), annexes `ANNEX x.y …` (`kind=annex`). Wrapped heading lines merge ("Latin America and" + "the Caribbean"); a "… (continued)" heading reopens the current section.
+- **Boxes:** a `BOX x.y …` title (HelveticaLTStd-Bold 10pt) opens a `kind=box` section under the chapter; later pages repeat the title as a running header. Box text is Garamond **10.6pt** while chapter text is **11pt**, so on shared pages each body line is routed to the box or the chapter by size. Box figures/tables (`FIGURE B1.1.1`) belong to the box.
+- **Levels 3–4:** HelveticaLTStd-Roman 11pt sub-headings in any blue (`#4475a1`, and `#215e99`/`#4f81bd`/`#2e73b5` in some boxes and Ch. 3) ("Recent developments", "Outlook", "Risks", box sub-heads — the next body line's size decides box vs chapter) and AGaramondPro-BoldItalic 11pt blue minor headings ("Downside risks"). Wrapped lines merge.
+- **Excluded:** "References" sections keep their place in the tree but produce no chunks (bibliographies would swamp keyword search with author names).
+- **Chunks:** text ~350 tokens, ~50 overlap, per leaf section. `sections.content` holds each section's own text.
+- **Objects:** FIGURE/TABLE/BOX titles are HelveticaLTStd-Bold 10pt (TABLE 4.1 is 11pt); numbers may carry a `B` (box) or `A` (annex) prefix.
+- **Figures:** each `FIGURE x.y` title owns the Helvetica lines below it on its page (until the next title) → one `kind=chart` chunk: title, the italic takeaway paragraph (HelveticaLTStd-Oblique 8pt), panel titles ("A. …", Bold 7pt), and Sources/Note lines (Roman 6pt). Chart tick labels are dropped. No vision.
+- **Tables:** each `TABLE x.y` title's cell lines → row reconstruction, `$` merge, header rows aligned (year cells such as `2026f`, `24Q4`, `26Q1e`, `2025/26e` count as numeric), repeated year columns labelled "(change vs January 2026 projections)", split at ≤ 400 tokens with the header repeated and the title on every piece; the table's Sources/Note lines become a separate `kind=caption` chunk. Statistical Annex pages 187–190 are whole-page tables titled by their heading. Table cells never carry footnote refs (their superscripts are table notes).
+- **Section summaries:** every level-1/2 section whose text (including descendants) is ≥ 300 tokens gets a 3–5 sentence Gemini summary (≈ 44 for this PDF), stored as a `kind=section_summary` chunk "Summary of <path>: …". Prompts are truncated to 6,000 tokens; results are cached by model + prompt version + prompt; generation calls are rate-limited (`GEMINI_CHAT_REQUESTS_PER_MINUTE`, default 10).
 
 ### 5.4 iMac — `visual` profile
 
@@ -296,8 +296,8 @@ Per question: **retrieval hit** (an expected page/section among final sources) �
 
 ## 9. Testing
 
-- **Python (pytest, offline)** — footnote linking (iMac p7 marker 18 → note 18 text) · boilerplate stripping · GEP Contents parsing and page-offset mapping (`Risks to the outlook` → PDF p52) · chunker invariants (no chunk crosses a section; size bounds; tables never split mid-row) · vision cross-check using fixture JSON · number normalization.
-- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106 · iMac has table chunks containing `0.59W` and `45%` · GPO: the three brief facts sit in the expected chunks (166 libraries; govinfo deployment in the Acting Deputy Director's message; "$375 million" in text and "$375.7 million" in the By-the-Numbers table), a `› govinfo` section exists, ≥ 15 caption and ≥ 4 table chunks · every chunk has a non-empty embedding of `EMBED_DIM`.
+- **Python (pytest, offline)** — footnote linking (iMac p7 marker 18 → note 18 text) · boilerplate stripping · GEP line roles, reading order and section tree (six regions on their real pages, boxes, wrapped headings) · chunker invariants (no chunk crosses a section; size bounds; tables never split mid-row) · vision cross-check using fixture JSON · number normalization.
+- **Post-ingest (`ingest/validate.py`)** — GEP has 6 region sections with page ranges inside p81–106, the South Asia outlook text and Table 2.9 under South Asia, Executive Summary text, a Chapter 3 summary, BOX 1.1, ≥ 40 chart / ≥ 100 table / ≥ 30 summary chunks, and no reference-list text · iMac has table chunks containing `0.59W` and `45%` · GPO: the three brief facts sit in the expected chunks (166 libraries; govinfo deployment in the Acting Deputy Director's message; "$375 million" in text and "$375.7 million" in the By-the-Numbers table), a `› govinfo` section exists, ≥ 15 caption and ≥ 4 table chunks · every chunk has a non-empty embedding of `EMBED_DIM`.
 - **TypeScript (vitest)** — router regexes · RRF fusion · number normalization and verifier · prompt/context assembly · one SQL integration test against the Docker DB.
 - **End-to-end** — the eval scorecard (§8) is the acceptance test.
 
@@ -310,7 +310,7 @@ The work is split into sub-projects. Each gets its own implementation plan in `d
 | 1 | Foundation — Docker Postgres+pgvector, schema, `.env.example`, Python and Next.js skeletons, Gemini client wrappers | `01-foundation.md` | `docker compose up` works, schema applies, both skeletons run, a Gemini embed call succeeds |
 | 2 | Shared ingestion core — parsing, boilerplate, tables, footnotes, chunk helpers, embed, store, cache, report, CLI | `02-ingest-core.md` | Unit tests pass; a dummy profile ingests a PDF end-to-end |
 | 3 | GPO narrative profile | `03-gpo-narrative.md` | GPO ingested; validate.py GPO checks pass |
-| 4 | GEP hierarchical profile — section tree, contents parsing, boxes, summaries | `04-gep-hierarchical.md` | GEP ingested; section tree and region checks pass |
+| 4 | GEP hierarchical profile — section tree from bookmarks + typography, boxes, figures, tables, summaries | `04-gep-hierarchical.md` | GEP ingested; section tree and region checks pass |
 | 5 | iMac visual profile — vision transcription, cross-check, endnotes | `05-imac-visual.md` | iMac ingested; table/footnote checks pass |
 | 6 | Retrieval API — condense, router, hybrid SQL, rerank, context, refusal, generation, verifier | `06-retrieval-api.md` | vitest passes; `/api/chat` answers via curl with sources |
 | 7 | Chat UI — selector, streaming, citations drawer, PDF links, debug toggle, warnings | `07-chat-ui.md` | Manual walkthrough of all 3 documents in the browser |

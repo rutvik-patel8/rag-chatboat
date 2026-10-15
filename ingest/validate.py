@@ -71,10 +71,48 @@ def section_exists(path: str) -> Check:
     return check
 
 
-MESSAGE = "A Message from the Acting Deputy Director"
+def regions_within(count: int, first: int, last: int) -> Check:
+    def check(conn: psycopg.Connection, slug: str) -> CheckResult:
+        rows = conn.execute(
+            "SELECT s.title, s.page_start, s.page_end FROM sections s JOIN documents d ON d.id = s.doc_id "
+            "WHERE d.slug = %s AND s.kind = 'region' ORDER BY s.page_start",
+            (slug,),
+        ).fetchall()
+        inside = all(first <= a <= b <= last for _, a, b in rows)
+        return CheckResult(f"{count} region sections within p{first}–{last}", len(rows) == count and inside, f"{rows}")
 
-# Per-document checks (spec §9); gep and imac are added by sub-projects 4 and 5.
+    return check
+
+
+def no_chunks_under(title: str) -> Check:
+    def check(conn: psycopg.Connection, slug: str) -> CheckResult:
+        n = conn.execute(
+            "SELECT count(*) FROM chunks c JOIN documents d ON d.id = c.doc_id JOIN sections s ON s.id = c.section_id "
+            "WHERE d.slug = %s AND s.title = %s",
+            (slug, title),
+        ).fetchone()[0]
+        return CheckResult(f"no chunks under {title!r}", n == 0, f"{n} found")
+
+    return check
+
+
+MESSAGE = "A Message from the Acting Deputy Director"
+GEP_SAR = "Ch. 2 Regional Outlooks › South Asia"
+
+# Per-document checks (spec §9); imac is added by sub-project 5.
 DOC_CHECKS: dict[str, list[Check]] = {
+    "gep": [
+        regions_within(6, 81, 106),
+        chunk_with("Growth in SAR is expected to soften to 6.3 percent in 2026", "text", f"{GEP_SAR} › Outlook"),
+        chunk_with("TABLE 2.9 South Asia forecast summary", "table"),
+        chunk_with("The global economy is facing another major shock", "text", "Executive Summary"),
+        chunk_with("Summary of Ch. 3 A Rising Challenge", "section_summary"),
+        section_exists("Ch. 1 Global Outlook › BOX 1.1 How much will AI affect global growth?"),
+        kind_at_least("chart", 40),
+        kind_at_least("table", 100),
+        kind_at_least("section_summary", 30),
+        no_chunks_under("References"),
+    ],
     "gpo": [
         chunk_with("visited 166 depository libraries", "text"),
         chunk_with("full-scale deployment of govinfo", "text", MESSAGE),

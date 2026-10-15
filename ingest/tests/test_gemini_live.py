@@ -23,3 +23,12 @@ def test_real_embeddings_are_normalised_and_meaningful():
     assert len(doc) == settings.embed_dim
     assert math.isclose(sum(v * v for v in doc), 1.0, rel_tol=1e-6)
     assert cosine(query, doc) > cosine(query, unrelated)
+
+
+def test_real_generation_answers_from_the_prompt():
+    from gemini import make_generator
+
+    answer = make_generator(load_settings()).generate(
+        "Growth in South Asia is projected at 6.3 percent in 2026. Reply with only the 2026 growth projection."
+    )
+    assert "6.3" in answer
