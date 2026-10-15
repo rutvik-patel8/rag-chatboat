@@ -163,3 +163,45 @@ def test_gep_checks_report_a_misplaced_region(conn):
     store_gep_like(conn, "test-gep", regions=regions)
     failed = [r.name for r in (check(conn, "test-gep") for check in DOC_CHECKS["gep"]) if not r.ok]
     assert failed == ["6 region sections within p81–106"]
+
+
+def store_imac_like(conn, slug, energy_footnote=True):
+    settings = load_settings()
+    vec = [1.0] + [0.0] * (settings.embed_dim - 1)
+    sections = [
+        SectionDraft("root", "iMac", 0, "", 1, 12),
+        SectionDraft("use", "Use", 1, "Use", 7, 7, "root"),
+        SectionDraft("cf", "Carbon Footprint", 1, "Carbon Footprint", 10, 10, "root"),
+        SectionDraft("en", "Endnotes", 1, "Endnotes", 11, 12, "root"),
+    ]
+    note18 = [{"n": 18, "text": "Energy consumption values are based on ENERGY STAR."}] if energy_footnote else []
+    chunks = [
+        ChunkDraft("use", "text", "iMac uses 58 percent less energy than the requirement for ENERGY STAR.", 7, 7, footnotes=note18),
+        ChunkDraft("use", "text", "iMac uses 100% recycled aluminum in the stand.", 1, 1),
+        ChunkDraft("cf", "table", "| Product use | 45% |", 10, 10),
+        ChunkDraft("en", "table", "| Sleep | 0.56W | 0.57W | 0.59W |", 12, 12),
+    ]
+    chunks += [ChunkDraft("cf", "chart", f"Values (measured from the chart's shapes): Use: 156 kg (45%) {i}", 2, 2) for i in range(3)]
+    chunks += [ChunkDraft("cf", "callout", f"76% recycled content {i}", 6, 6) for i in range(3)]
+    chunks += [ChunkDraft("en", "footnote", f"Footnote {i}: text", 11, 11) for i in range(1, 20)]
+    store_document(
+        conn, DocumentMeta(slug, "iMac", "visual", 12), sections, chunks,
+        [c.content for c in chunks], [vec] * len(chunks), settings.embed_model, settings.embed_dim,
+    )
+
+
+def test_imac_checks_pass_on_a_document_with_the_brief_facts(conn):
+    from validate import DOC_CHECKS
+
+    store_imac_like(conn, "test-imac")
+    results = [check(conn, "test-imac") for check in DOC_CHECKS["imac"]]
+    assert len(results) == 8
+    assert all(r.ok for r in results), [r for r in results if not r.ok]
+
+
+def test_imac_checks_report_a_missing_footnote_link(conn):
+    from validate import DOC_CHECKS
+
+    store_imac_like(conn, "test-imac", energy_footnote=False)
+    failed = [r.name for r in (check(conn, "test-imac") for check in DOC_CHECKS["imac"]) if not r.ok]
+    assert failed == ["chunk with '58 percent less energy than the requirement for ENERGY STAR' citing footnote 18"]

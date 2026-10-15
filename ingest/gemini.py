@@ -1,6 +1,7 @@
 """Thin wrapper over google-genai: batched, L2-normalised embeddings with retry."""
 from __future__ import annotations
 
+import json
 import math
 import time
 from collections import deque
@@ -169,6 +170,21 @@ class Generator:
         if not text:
             raise RuntimeError(f"{self._model} returned no text")
         return text
+
+
+    def generate_json(self, prompt: str, schema: dict, image_png: bytes | None = None) -> dict:
+        """Structured output: the answer must parse as JSON matching `schema` (optionally about one image)."""
+        if self._limiter is not None:
+            self._limiter.acquire(1)
+        contents = [types.Part.from_bytes(data=image_png, mime_type="image/png"), prompt] if image_png else prompt
+        config = types.GenerateContentConfig(temperature=0, response_mime_type="application/json", response_schema=schema)
+        response = with_retry(
+            lambda: self._client.models.generate_content(model=self._model, contents=contents, config=config),
+            sleep=self._sleep,
+        )
+        if not (response.text or "").strip():
+            raise RuntimeError(f"{self._model} returned no text")
+        return json.loads(response.text)
 
 
 def make_generator(settings: Settings, model: str | None = None) -> Generator:

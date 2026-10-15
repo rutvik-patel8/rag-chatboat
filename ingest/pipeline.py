@@ -29,6 +29,7 @@ class DocSpec:
     skip_pages: frozenset[int] = frozenset()
     endnote_pages: frozenset[int] = frozenset()
     summaries: bool = False  # add a Gemini summary chunk per major section (spec §5.3)
+    vision: bool = False  # let the profile transcribe pages with Gemini vision (spec §5.4)
 
 
 @dataclass
@@ -40,6 +41,7 @@ class Prepared:
     boilerplate: int
     raw_pages: list[Page] = field(default_factory=list)  # boilerplate stripped; notes and markers still in place
     vocab: frozenset[str] = frozenset()  # document words, for line-end hyphen decisions
+    describe: Callable[[int], list[dict]] | None = None  # page number → vision blocks (set by run when spec.vision)
 
 
 @dataclass
@@ -51,6 +53,7 @@ class BuildResult:
 
 Profile = Callable[[DocSpec, Prepared], BuildResult]
 Summarizer = Callable[[DocSpec, list[SectionDraft], list[str]], list[ChunkDraft]]  # appends warnings
+Describer = Callable[[DocSpec, int], list[dict]]  # page number → vision blocks
 
 
 def prepare(spec: DocSpec) -> Prepared:
@@ -113,10 +116,19 @@ def check_token_limit(texts: list[str], chunks: list[ChunkDraft]) -> None:
 
 
 def run(
-    spec: DocSpec, profile: Profile, settings: Settings, conn, embedder, cache_root: Path, summarizer: Summarizer | None = None
+    spec: DocSpec,
+    profile: Profile,
+    settings: Settings,
+    conn,
+    embedder,
+    cache_root: Path,
+    summarizer: Summarizer | None = None,
+    describer: Describer | None = None,
 ) -> Report:
     report = Report(spec.slug, spec.title)
     prepared = prepare(spec)
+    if spec.vision and describer is not None:
+        prepared.describe = lambda page_number: describer(spec, page_number)
     result = profile(spec, prepared)
     cited = attach_footnotes(result.chunks, prepared.notes, report)
     chunks = result.chunks + note_chunks(prepared.notes.notes, result.sections, cited)

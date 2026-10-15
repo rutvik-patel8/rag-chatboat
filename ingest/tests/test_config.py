@@ -55,3 +55,10 @@ def test_summary_model_defaults_to_the_chat_model():
 def test_embed_token_rate_limit_defaults_below_the_free_tier():
     assert load_settings(VALID).embed_tokens_per_minute == 20000
     assert load_settings({**VALID, "EMBED_TOKENS_PER_MINUTE": "1000000"}).embed_tokens_per_minute == 1000000
+
+
+def test_vision_model_defaults_to_the_summary_model():
+    assert load_settings(VALID).vision_model == "gemini-3.8-flash"
+    lite = {**VALID, "GEMINI_SUMMARY_MODEL": "gemini-3.5-flash-lite"}
+    assert load_settings(lite).vision_model == "gemini-3.5-flash-lite"
+    assert load_settings({**lite, "GEMINI_VISION_MODEL": "gemini-3.8-flash"}).vision_model == "gemini-3.8-flash"

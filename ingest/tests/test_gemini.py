@@ -226,3 +226,35 @@ def test_embedder_keeps_each_batch_within_the_token_budget():
     assert [len(c.contents) for c in models.calls] == [2, 2, 1]
     assert asked_texts == [2, 2, 1]
     assert asked_tokens == [8, 8, 4]
+
+
+class FakeJsonModels:
+    def __init__(self, text='{"blocks": []}'):
+        self.text = text
+        self.calls = []
+
+    def generate_content(self, *, model, contents, config):
+        self.calls.append(SimpleNamespace(model=model, contents=contents, config=config))
+        return SimpleNamespace(text=self.text)
+
+
+def test_generate_json_sends_the_image_and_schema_and_parses_the_answer():
+    from gemini import Generator
+
+    models = FakeJsonModels('{"blocks": [{"kind": "text", "markdown": "Use"}]}')
+    generator = Generator(SimpleNamespace(models=models), "gemini-3.5-flash-lite", sleep=lambda s: None)
+    schema = {"type": "object"}
+    assert generator.generate_json("Transcribe", schema, b"\x89PNG") == {"blocks": [{"kind": "text", "markdown": "Use"}]}
+    call = models.calls[0]
+    assert call.contents[1] == "Transcribe" and call.contents[0].inline_data.data == b"\x89PNG"
+    assert (call.config.temperature, call.config.response_mime_type, call.config.response_schema) == (0, "application/json", schema)
+
+
+def test_generate_json_rejects_empty_answers_and_asks_the_limiter():
+    from gemini import Generator
+
+    asked = []
+    generator = Generator(SimpleNamespace(models=FakeJsonModels("")), "m", sleep=lambda s: None, limiter=SimpleNamespace(acquire=asked.append))
+    with pytest.raises(RuntimeError, match="no text"):
+        generator.generate_json("x", {})
+    assert asked == [1]

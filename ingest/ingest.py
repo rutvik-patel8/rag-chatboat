@@ -11,6 +11,7 @@ from cache import CACHE_ROOT, JsonCache
 from config import load_settings
 from db import connect
 from enrich.summaries import summary_chunks
+from enrich.vision import PageDescriber
 from gemini import make_embedder, make_generator
 from pipeline import run
 from profiles import DOCS, PROFILES
@@ -31,6 +32,12 @@ def main(argv: list[str] | None = None) -> int:
     embedder = make_embedder(settings)
     generator = make_generator(settings, settings.summary_model)  # summaries can use a cheaper model's quota
 
+    vision = generator if settings.vision_model == settings.summary_model else make_generator(settings, settings.vision_model)
+
+    def describer(spec, page_number):
+        cache = JsonCache(CACHE_ROOT, f"{spec.slug}/vision")
+        return PageDescriber(vision, cache, settings.vision_model)(spec.path, page_number)
+
     def summarizer(spec, sections, warnings):
         cache = JsonCache(CACHE_ROOT, f"{spec.slug}/summaries")
         return summary_chunks(spec.title, sections, generator, cache, settings.summary_model, warnings)
@@ -40,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             spec = DOCS[slug]
             if args.reset:
                 print(f"{slug}: cleared {JsonCache(CACHE_ROOT, slug).clear()} cache entries")
-            report = run(spec, PROFILES[spec.profile], settings, conn, embedder, CACHE_ROOT, summarizer)
+            report = run(spec, PROFILES[spec.profile], settings, conn, embedder, CACHE_ROOT, summarizer, describer)
             print(report.format())
     return 0
 

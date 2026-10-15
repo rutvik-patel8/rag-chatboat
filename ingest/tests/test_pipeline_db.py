@@ -77,3 +77,23 @@ def test_summaries_are_added_only_when_the_spec_asks(conn, tmp_path):
     report = run(replace(spec, summaries=True), plain.build, settings, conn, FakeEmbedder(settings.embed_dim), tmp_path, summarizer)
     assert calls == ["test-imac"]
     assert report.chunks_by_kind["section_summary"] == 1
+
+
+def test_vision_describer_reaches_the_profile_only_when_the_spec_asks(conn, tmp_path):
+    settings = load_settings()
+    seen = []
+
+    def describer(spec, page_number):
+        seen.append((spec.slug, page_number))
+        return []
+
+    def profile(spec, prepared):
+        if prepared.describe is not None:
+            prepared.describe(7)
+        return plain.build(spec, prepared)
+
+    spec = replace(DOCS["imac"], slug="test-imac", vision=False)
+    run(spec, profile, settings, conn, FakeEmbedder(settings.embed_dim), tmp_path, describer=describer)
+    assert seen == []
+    run(replace(spec, vision=True), profile, settings, conn, FakeEmbedder(settings.embed_dim), tmp_path, describer=describer)
+    assert seen == [("test-imac", 7)]

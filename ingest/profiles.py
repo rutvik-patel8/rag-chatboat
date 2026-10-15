@@ -1,7 +1,7 @@
 """The three source documents and the profile each one uses (sub-projects 3–5 swap in real profiles)."""
 from __future__ import annotations
 
-from chunk import hierarchical, narrative, plain
+from chunk import hierarchical, narrative, plain, visual
 from config import REPO_ROOT
 from pipeline import DocSpec, Profile
 
@@ -27,9 +27,15 @@ DOCS: dict[str, DocSpec] = {
         "imac",
         "iMac Product Environmental Report (Oct 2024)",
         DOCS_DIR / "iMac_PER_Oct2024.pdf",
-        "plain",
+        "visual",
         endnote_pages=frozenset({11, 12}),
+        vision=True,
     ),
 }
 
-PROFILES: dict[str, Profile] = {"plain": plain.build, "narrative": narrative.build, "hierarchical": hierarchical.build}
+PROFILES: dict[str, Profile] = {
+    "plain": plain.build,
+    "narrative": narrative.build,
+    "hierarchical": hierarchical.build,
+    "visual": visual.build,
+}
