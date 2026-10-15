@@ -76,3 +76,13 @@ def test_year_cells_with_suffixes_count_as_numeric():
 
     rows = [["TABLE 2.9"], ["2023", "2025e", "2026f", "24Q4"], ["World", "2.8", "2.9", "2.5", "3.1"]]
     assert pad_numeric_rows(rows)[1] == ["", "2023", "2025e", "2026f", "24Q4"]
+
+
+def test_quarter_and_fiscal_year_cells_count_as_numeric():
+    from parse.tables import pad_numeric_rows
+
+    annex = [["2023", "2026f", "24Q4", "26Q1e"], ["India", "7.2", "6.6", "6.2", "7.8"]]
+    fiscal = [["2022/23", "2025/26e"], ["Bangladesh", "5.8", "3.8"]]
+    assert pad_numeric_rows(annex)[0] == ["", "2023", "2026f", "24Q4", "26Q1e"]
+    assert pad_numeric_rows(fiscal)[0] == ["", "2022/23", "2025/26e"]
+    assert pad_numeric_rows([["(Percent change)", "x"], ["a", "b", "c"]])[0] == ["(Percent change)", "x"]
