@@ -57,3 +57,22 @@ def test_changing_model_or_dim_re_embeds(tmp_path):
     embed_texts(["a"], embedder, cache, "other-model", 2)
     embed_texts(["a"], embedder, cache, "m", 3)
     assert len(embedder.calls) == 3
+
+
+class FailingSecondBatch(CountingEmbedder):
+    def embed(self, texts, task_type):
+        if self.calls:
+            raise RuntimeError("429 quota")
+        return super().embed(texts, task_type)
+
+
+def test_finished_batches_stay_cached_when_a_later_batch_fails(tmp_path):
+    cache = JsonCache(tmp_path, "gpo/embeddings")
+    texts = [f"text {i}" for i in range(150)]
+    try:
+        embed_texts(texts, FailingSecondBatch(), cache, "m", 2)
+    except RuntimeError:
+        pass
+    retry = CountingEmbedder()
+    embed_texts(texts, retry, cache, "m", 2)
+    assert [len(batch) for batch, _ in retry.calls] == [50]

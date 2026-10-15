@@ -33,3 +33,8 @@ def test_non_integer_dim_is_rejected():
 def test_out_of_range_dim_is_rejected():
     with pytest.raises(ConfigError, match="between 128 and 3072"):
         load_settings({**VALID, "EMBED_DIM": "4096"})
+
+
+def test_embed_rate_limit_defaults_to_free_tier_and_can_be_raised():
+    assert load_settings(VALID).embed_per_minute == 100
+    assert load_settings({**VALID, "EMBED_REQUESTS_PER_MINUTE": "1500"}).embed_per_minute == 1500

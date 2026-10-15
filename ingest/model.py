@@ -13,6 +13,8 @@ class Span:
     size: float
     flags: int
     bbox: BBox
+    font: str = ""
+    color: int = 0  # sRGB as 0xRRGGBB
 
     @property
     def is_superscript(self) -> bool:

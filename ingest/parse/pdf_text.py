@@ -44,7 +44,7 @@ def load_pages(pdf_path: Path | str) -> list[Page]:
                 for raw in block["lines"]:
                     texts = [(_span_text(s), s) for s in raw["spans"]]
                     spans = tuple(
-                        Span(normalize(text), round(s["size"], 2), s["flags"], tuple(s["bbox"]))
+                        Span(normalize(text), round(s["size"], 2), s["flags"], tuple(s["bbox"]), s["font"], s["color"])
                         for text, s in texts
                         if text
                     )
@@ -80,6 +80,8 @@ def join_lines(left: str, right: str, vocab: frozenset[str]) -> tuple[str, int]:
     A line-end hyphen is dropped only when the joined word appears elsewhere in the document
     ("house-" + "holds" → "households"); otherwise it is a real compound ("middle-income").
     """
+    if left.endswith("-") and left[-2:-1].isdigit() and right[:1].isdigit():
+        return left + right, len(left)  # "Public Law 103-" + "40" → "103-40"
     hyphen = _TRAILING_HYPHEN.search(left)
     word = _LEADING_WORD.match(right)
     if hyphen and right[:1].islower():
