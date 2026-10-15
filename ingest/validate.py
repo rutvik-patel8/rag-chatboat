@@ -49,6 +49,18 @@ def no_chunk_with(needle: str) -> Check:
     return check
 
 
+def chunk_with_footnote(needle: str, n: int) -> Check:
+    def check(conn: psycopg.Connection, slug: str) -> CheckResult:
+        count = conn.execute(
+            "SELECT count(*) FROM chunks c JOIN documents d ON d.id = c.doc_id "
+            "WHERE d.slug = %s AND strpos(c.content, %s) > 0 AND c.footnotes @> %s::jsonb",
+            (slug, needle, f'[{{"n": {n}}}]'),
+        ).fetchone()[0]
+        return CheckResult(f"chunk with {needle!r} citing footnote {n}", count > 0, f"{count} found")
+
+    return check
+
+
 def kind_at_least(kind: str, minimum: int) -> Check:
     def check(conn: psycopg.Connection, slug: str) -> CheckResult:
         n = conn.execute(
@@ -99,8 +111,18 @@ def no_chunks_under(title: str) -> Check:
 MESSAGE = "A Message from the Acting Deputy Director"
 GEP_SAR = "Ch. 2 Regional Outlooks › South Asia"
 
-# Per-document checks (spec §9); imac is added by sub-project 5.
+# Per-document checks (spec §9).
 DOC_CHECKS: dict[str, list[Check]] = {
+    "imac": [
+        chunk_with("0.59W", "table"),
+        chunk_with("45%", "table"),
+        chunk_with("approximate, read from chart", "chart"),
+        chunk_with_footnote("58 percent less energy than the requirement for ENERGY STAR", 18),
+        chunk_with("recycled aluminum in the stand"),
+        kind_at_least("footnote", 19),
+        kind_at_least("callout", 3),
+        kind_at_least("chart", 3),
+    ],
     "gep": [
         regions_within(6, 81, 106),
         chunk_with("Growth in SAR is expected to soften to 6.3 percent in 2026", "text", f"{GEP_SAR} › Outlook"),
