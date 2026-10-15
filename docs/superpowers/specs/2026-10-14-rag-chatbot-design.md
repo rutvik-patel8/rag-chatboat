@@ -284,20 +284,20 @@ Each entry: `{id, question, scope, type: brief|coverage|trap|isolation, must_con
   - iMac: energy use vs ENERGY STAR requirement · total carbon footprint and use vs manufacturing share · stand material and recycled percentage.
 - **Coverage (4)** — iMac sleep power at 230V (`0.59W`, table in endnote 18) · iMac carbon split (`50%`, `45%`, p10) · one GEP Statistical Annex forecast row (Bhutan 2026f, `7.1`, p189) and one GEP Box question (BOX 1.1: AI growth in the 2030s, `1970s`, pp30–35).
 - **Trap (4)** — iMac battery life · GPO budget in FY 2022 · GEP growth outlook for Antarctica · one off-topic question (e.g. "Who won the 2022 FIFA World Cup?").
-- **Isolation (1)** — East Asia and Pacific growth outlook: all sources must be EAP (or Statistical Annex rows); `must_not_contain` holds South Asia-only figures (`6.3%`, `6.6%`).
+- **Isolation (1)** — East Asia and Pacific growth outlook: all cited sources must be EAP (or Statistical Annex rows); `must_not_contain` holds South Asia figures absent from the EAP pages (`6.3%`, `7%`).
 
 ### 8.2 Scorecard (`npm run eval`)
 
 Per question:
 - **Retrieval hit** — a final source sits in `expected_section` (or below it) or covers an expected page.
-- **Fact match** — every `must_contain` appears in the answer after normalization (case, dashes, thousands separators, `percent` → `%`).
+- **Fact match** — every `must_contain` appears in the answer after normalization (case, dashes, quotes, thousands separators, `percent` → `%`), on number boundaries (`6.3%` does not match `16.3%`; `375` matches `$375.7`).
 - **Citation precision** — the share of cited sources that are relevant (as for retrieval hit).
 - **Verifier clean** — no verifier warnings (the "reranking failed" notice is not a verifier warning).
-- **Trap refused** — the answer starts with "I couldn't find this" (the gate's message or the prompt's refusal rule). No numbers check: the gate's "Closest sections" list carries chapter numbers.
-- **Isolated** (isolation only) — every source in `expected_section` or the Statistical Annex, and no `must_not_contain` figure in the answer.
-- **Pass** — brief/coverage: hit, fact match and at least one relevant citation; isolation: also isolated; trap: refused. The pass bar (§1) is computed from these, plus "verifier clean" over all answered questions.
+- **Trap refused** — the answer starts with "I couldn't find this" (the gate's message or the prompt's refusal rule) and cites no source. No numbers check: the gate's "Closest sections" list carries chapter numbers.
+- **Isolated** (isolation only) — every cited source in `expected_section` or the Statistical Annex, and no `must_not_contain` figure in the answer.
+- **Pass** — brief/coverage: hit, fact match and at least one relevant citation; isolation: also isolated; trap: refused. The pass bar (§1) is computed from these, plus "verifier clean" over all answered questions and no errored question. A failed rerank call counts as an error outside the `noRerank` ablation, because the pipeline silently lost its relevance gate.
 
-The two broad GEP questions additionally get a judge (the utility model) scoring rubric coverage and unsupported claims; it is reported, not gated. Results are written to `eval/results/<timestamp>.json` and printed as a table; the command exits 1 when the pass bar is not met. `--only <id,id>` runs a subset (no pass bar).
+The two broad GEP questions additionally get a judge (the utility model) scoring rubric coverage and unsupported claims; it is reported, not gated. Results are written to `eval/results/<timestamp>.json` (and `<timestamp>.partial.jsonl` as each question finishes) and printed as a table; the command exits 1 when the pass bar is not met. `--only <id,id>` runs a subset (no pass bar).
 
 ### 8.3 Ablations
 
