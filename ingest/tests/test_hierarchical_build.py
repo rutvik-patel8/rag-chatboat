@@ -141,3 +141,24 @@ def test_front_matter_text_lands_in_its_own_section(built):
     assert "Global growth this year will slump" in foreword.content
     assert "Global growth this year will slump" not in (acknowledgments.content or "")
     assert not [c for c in built[0].chunks if c.section_key == "root"]
+
+
+def test_annex_tables_and_eleven_point_titles_are_kept(built):
+    for title in ("TABLE A3.1", "TABLE A3.4", "TABLE 4.1 Economies in the sample"):
+        assert [k for k, _ in chunks_with(built, title)].count("table") >= 1, title
+    assert ("chart" in [k for k, _ in chunks_with(built, "FIGURE A4.2.1")])
+    pages = {c.page_start for c in built[0].chunks}
+    assert {135, 136, 137, 138, 175} <= pages
+
+
+def test_sub_headings_in_other_blues_open_sections(built):
+    titles = {s.title for s in built[0].sections}
+    for title in (
+        "Credit ratings and frontier market status",
+        "Liquidity and rollover risk",
+        "Trends and developments in private investment",
+    ):
+        assert title in titles, title
+    assert "BOX 2.1 Low-income countries: Recent developments and outlook › Recent developments" in " ".join(
+        s.path for s in built[0].sections
+    )

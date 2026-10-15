@@ -16,7 +16,7 @@ from pipeline import BuildResult, DocSpec, Prepared
 TARGET_TOKENS = 350
 OVERLAP_TOKENS = 50
 TABLE_TOKENS = 400
-_OBJECT = re.compile(r"(FIGURE|TABLE|BOX)\s*(B?\d+(?:\.\d+)+)")
+_OBJECT = re.compile(r"(FIGURE|TABLE|BOX)\s*([AB]?\d+(?:\.\d+)+)")  # 1.1, B1.1.1 (box), A3.1 (annex)
 _PANEL = re.compile(r"[A-F]\.\s")
 
 
@@ -27,9 +27,10 @@ class GepLayout:
     front_title: tuple[str, float] = ("HelveticaLTStd-Cond", 26.0)  # Acknowledgments, Foreword, Executive Summary…
     section_font: str = "HelveticaLTStd-Bold"
     section_sizes: tuple[float, ...] = (16.0, 14.0)  # "Summary", "South Asia", "ANNEX 3.1 …"; Ch. 2 "References" is 14pt
-    subsection: tuple[str, float, int] = ("HelveticaLTStd-Roman", 11.0, 0x4475A1)  # "Outlook", box sub-heads
+    subsection: tuple[str, float] = ("HelveticaLTStd-Roman", 11.0)  # any blue: "Outlook", box and Ch. 3 sub-heads
     minor: tuple[str, float, int] = ("AGaramondPro-BoldItalic", 11.0, 0x4475A1)  # "Downside risks"
-    object_title: tuple[str, float] = ("HelveticaLTStd-Bold", 10.0)  # FIGURE / TABLE / BOX x.y titles
+    object_font: str = "HelveticaLTStd-Bold"  # FIGURE / TABLE / BOX x.y titles (TABLE 4.1 is 11pt)
+    object_sizes: tuple[float, ...] = (10.0, 11.0)
     box_body_size: float = 10.6  # box text; chapter text is 11pt
     chart_text: frozenset[tuple[str, float]] = frozenset(
         {("HelveticaLTStd-Obl", 8.0), ("HelveticaLTStd-Bold", 7.0), ("HelveticaLTStd-Roman", 6.0)}
@@ -68,11 +69,11 @@ def line_role(line: Line, layout: GepLayout) -> str:
         return "front"
     if m.font == layout.section_font and round(m.size, 1) in layout.section_sizes:
         return "section"
-    if _is(m, *layout.subsection):
+    if _is(m, *layout.subsection) and m.color != 0:  # several blues are used; black 11pt Helvetica is chart text
         return "subsection"
     if _is(m, *layout.minor):
         return "minor"
-    if _is(m, *layout.object_title) and _OBJECT.match(line.text):
+    if m.font == layout.object_font and round(m.size, 1) in layout.object_sizes and _OBJECT.match(line.text):
         return "object"
     if m.font.startswith("Helvetica"):
         return "graphic"
