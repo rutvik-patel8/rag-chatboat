@@ -121,3 +121,23 @@ def test_chunks_stay_inside_their_sections_and_budgets(built):
     kinds = [c.kind for c in result.chunks]
     assert kinds.count("text") >= 300 and kinds.count("table") >= 120 and kinds.count("chart") >= 50
     assert len(result.sections) >= 130
+
+
+def section(built, path_end):
+    return next(s for s in built[0].sections if s.path.endswith(path_end))
+
+
+def test_two_column_pages_are_read_column_by_column(built):
+    ch1, ch4 = "Ch. 1 Global Outlook", "Ch. 4 Navigating Volatility: Fiscal Policy and Commodity Price Swings"
+    paths = [s.path for s in built[0].sections]
+    assert f"{ch1} › Policy challenges › Key global challenges › Diversifying and deepening trade and economic partnerships" in paths
+    assert f"{ch4} › Policy frameworks for fiscal management › Evolution of fiscal policy frameworks" in paths
+    contribution = section(built, "› Contribution of rising government debt to EMDE interest rates")
+    assert len(contribution.content or "") > 1000 and "basis points" in contribution.content
+
+
+def test_front_matter_text_lands_in_its_own_section(built):
+    foreword, acknowledgments = section(built, "Foreword"), section(built, "Acknowledgments")
+    assert "Global growth this year will slump" in foreword.content
+    assert "Global growth this year will slump" not in (acknowledgments.content or "")
+    assert not [c for c in built[0].chunks if c.section_key == "root"]

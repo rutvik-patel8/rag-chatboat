@@ -127,6 +127,17 @@ def table_pieces(title: str, lines: list[Line], page: Page, layout: GepLayout) -
     return pieces, (f"{title}\n\n{notes}" if notes else "")
 
 
+def reading_order(page: Page) -> Page:
+    """Left column, then right column, each top to bottom. PDF stream order often starts with the right
+    column or a heading block. Lines wider than 55% of the page (single-column pages, titles) count as left."""
+
+    def column(line: Line) -> int:
+        x0, _, x1, _ = line.bbox
+        return 0 if x1 - x0 > 0.55 * page.width or (x0 + x1) / 2 < page.width / 2 else 1
+
+    return replace(page, lines=tuple(sorted(page.lines, key=lambda l: (column(l), round(l.bbox[1], 1), l.bbox[0]))))
+
+
 class _Outline:
     """The section tree as headings arrive in reading order, plus the body lines filed under it."""
 
@@ -212,7 +223,7 @@ class _Outline:
 
 def build(spec: DocSpec, prepared: Prepared, layout: GepLayout = GEP_LAYOUT) -> BuildResult:
     chapters = chapter_starts(spec.path)
-    pages = prepared.pages
+    pages = [reading_order(page) for page in prepared.pages]
     outline = _Outline(SectionDraft("root", spec.title, 0, "", pages[0].number, pages[-1].number), layout)
     chunks: list[ChunkDraft] = []
 
