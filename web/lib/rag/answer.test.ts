@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { answer, refusal, type ChatEvent, type Deps } from "@/lib/rag/answer";
+import { SYSTEM_PROMPT } from "@/lib/rag/prompt";
 import type { Catalog } from "@/lib/rag/router";
 import { candidate } from "@/lib/rag/testing";
 
@@ -99,5 +100,11 @@ describe("refusal", () => {
     expect(refusal("imac", { imac: { title: "iMac Report", sections: [] } }, closest)).toBe(
       "I couldn't find this in iMac Report. Closest sections: iMac Report; iMac Report › Ch. 2 Regional Outlooks › South Asia.",
     );
+  });
+});
+
+describe("SYSTEM_PROMPT", () => {
+  it("tells the model to refuse when no source answers, e.g. when reranking failed", () => {
+    expect(SYSTEM_PROMPT).toContain("If none of the sources answer the question, reply only: I couldn't find this in the documents.");
   });
 });

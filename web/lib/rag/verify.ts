@@ -4,6 +4,7 @@ export type SourceText = { id: number; label: string; text: string };
 
 /** Deterministic checks after generation: citations exist and every figure appears in a cited source. */
 export function verifyAnswer(answer: string, sources: SourceText[]): string[] {
+  if (answer.trim().startsWith("I couldn't find this")) return []; // a refusal has nothing to cite
   const warnings: string[] = [];
   const cited = [...answer.matchAll(/\[S(\d+)\]/g)].map((match) => Number(match[1]));
   const known = new Set(sources.map((source) => source.id));

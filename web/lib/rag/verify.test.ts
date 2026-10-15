@@ -7,6 +7,10 @@ describe("numbersIn", () => {
     expect(numbersIn("GPO staff visited 166 libraries [S1] and distributed 802,834 copies in FY 2018")).toEqual(["166", "802834", "2018"]);
     expect(numbersIn("growth of 6.30 percent, a −0.1 revision, CO2e and M4 chips")).toEqual(["6.3", "-0.1"]);
   });
+
+  it("ignores numbered-list markers", () => {
+    expect(numbersIn("The main risks are:\n1. Trade tensions [S1]\n2) Debt of 4.4 percent [S2]\n  3. Conflict")).toEqual(["4.4"]);
+  });
 });
 
 describe("verifyAnswer", () => {
@@ -28,5 +32,11 @@ describe("verifyAnswer", () => {
 
   it("flags an answer without citations", () => {
     expect(verifyAnswer("Growth slows.", sources)).toEqual(["no citations"]);
+  });
+});
+
+describe("verifyAnswer on a refusal", () => {
+  it("does not warn when the model says the sources do not answer the question", () => {
+    expect(verifyAnswer("I couldn't find this in the documents.", [{ id: 1, label: "[S1] GEP", text: "Growth 6.3" }])).toEqual([]);
   });
 });

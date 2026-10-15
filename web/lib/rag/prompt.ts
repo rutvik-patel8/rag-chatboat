@@ -8,6 +8,7 @@ Rules:
 - If the question is about one region, chapter or section, use only sources from it. Never mix facts from different regions or chapters unless the question asks for a comparison.
 - Values marked "approximate, read from chart" are approximate: say so. Mention footnotes that qualify or limit a claim.
 - If the sources answer only part of the question, answer that part and say what is missing. Do not fill gaps.
+- If none of the sources answer the question, reply only: I couldn't find this in the documents.
 - Start with the direct answer, then add supporting detail. Be concise.`;
 
 export function userPrompt(question: string, sources: string): string {
