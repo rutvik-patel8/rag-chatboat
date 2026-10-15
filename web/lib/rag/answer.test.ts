@@ -43,6 +43,7 @@ describe("answer", () => {
     expect(d.searches[0]).toMatchObject({ docs: ["gep"], paths: ["Ch. 2 Regional Outlooks › South Asia"], vector: [0.1, 0.2] });
     const sources = events[0] as Extract<ChatEvent, { type: "sources" }>;
     expect(sources.sources.map((s) => s.id)).toEqual([1]);
+    expect(sources.sources[0]).toMatchObject({ slug: "gep", doc: "Global Economic Prospects", pageStart: 96, text: expect.stringContaining("6.3 percent") });
     const done = events.at(-1) as Extract<ChatEvent, { type: "done" }>;
     expect(done.warnings).toEqual([]);
     expect(done.debug.candidates.map((c) => c.rerank)).toEqual([3, 0]);

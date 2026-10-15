@@ -7,7 +7,10 @@ import { verifyAnswer } from "@/lib/rag/verify";
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type ChatRequest = { question: string; scope: Scope; history: Turn[] };
-export type SourceInfo = { id: number; doc: string; sectionPath: string; pageStart: number; pageEnd: number; kind: string; snippet: string };
+export type SourceInfo = {
+  id: number; slug: string; doc: string; sectionPath: string; pageStart: number; pageEnd: number; kind: string; snippet: string;
+  text: string; // the whole block the model saw, for the sources drawer
+};
 export type Debug = {
   question: string;
   route: Route;
@@ -37,8 +40,8 @@ export function refusal(scope: Scope, catalog: Catalog, candidates: Candidate[])
 
 function sourceInfo(block: SourceBlock, docTitle: string): SourceInfo {
   return {
-    id: block.id, doc: docTitle, sectionPath: block.sectionPath, pageStart: block.pageStart, pageEnd: block.pageEnd,
-    kind: block.kind, snippet: block.text.slice(0, 300),
+    id: block.id, slug: block.docSlug, doc: docTitle, sectionPath: block.sectionPath, pageStart: block.pageStart,
+    pageEnd: block.pageEnd, kind: block.kind, snippet: block.text.slice(0, 300), text: block.text,
   };
 }
 
