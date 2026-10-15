@@ -58,3 +58,22 @@ def test_imac_ingests_end_to_end_with_footnotes(conn, tmp_path):
         ("%iMac | Product Environmental Report%",),
     ).fetchone()[0]
     assert leftovers == 0
+
+
+def test_summaries_are_added_only_when_the_spec_asks(conn, tmp_path):
+    from model import ChunkDraft
+
+    settings = load_settings()
+    calls = []
+
+    def summarizer(spec, sections):
+        calls.append(spec.slug)
+        root = next(s for s in sections if s.level == 0)
+        return [ChunkDraft(root.key, "section_summary", "Summary of iMac: recycled aluminum stand.", 1, 12)]
+
+    spec = replace(DOCS["imac"], slug="test-imac")
+    run(spec, plain.build, settings, conn, FakeEmbedder(settings.embed_dim), tmp_path, summarizer)
+    assert calls == []
+    report = run(replace(spec, summaries=True), plain.build, settings, conn, FakeEmbedder(settings.embed_dim), tmp_path, summarizer)
+    assert calls == ["test-imac"]
+    assert report.chunks_by_kind["section_summary"] == 1

@@ -10,7 +10,8 @@ import sys
 from cache import CACHE_ROOT, JsonCache
 from config import load_settings
 from db import connect
-from gemini import make_embedder
+from enrich.summaries import summary_chunks
+from gemini import make_embedder, make_generator
 from pipeline import run
 from profiles import DOCS, PROFILES
 
@@ -28,12 +29,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     settings = load_settings()
     embedder = make_embedder(settings)
+    generator = make_generator(settings)
+
+    def summarizer(spec, sections):
+        cache = JsonCache(CACHE_ROOT, f"{spec.slug}/summaries")
+        return summary_chunks(spec.title, sections, generator, cache, settings.chat_model)
+
     with connect(settings) as conn:
         for slug in args.docs:
             spec = DOCS[slug]
             if args.reset:
                 print(f"{slug}: cleared {JsonCache(CACHE_ROOT, slug).clear()} cache entries")
-            report = run(spec, PROFILES[spec.profile], settings, conn, embedder, CACHE_ROOT)
+            report = run(spec, PROFILES[spec.profile], settings, conn, embedder, CACHE_ROOT, summarizer)
             print(report.format())
     return 0
 

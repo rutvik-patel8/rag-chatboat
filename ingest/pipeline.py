@@ -28,6 +28,7 @@ class DocSpec:
     profile: str
     skip_pages: frozenset[int] = frozenset()
     endnote_pages: frozenset[int] = frozenset()
+    summaries: bool = False  # add a Gemini summary chunk per major section (spec §5.3)
 
 
 @dataclass
@@ -49,6 +50,7 @@ class BuildResult:
 
 
 Profile = Callable[[DocSpec, Prepared], BuildResult]
+Summarizer = Callable[[DocSpec, list[SectionDraft]], list[ChunkDraft]]
 
 
 def prepare(spec: DocSpec) -> Prepared:
@@ -110,12 +112,16 @@ def check_token_limit(texts: list[str], chunks: list[ChunkDraft]) -> None:
         raise ValueError(f"chunks over the {EMBED_TOKEN_LIMIT}-token embedding limit: {'; '.join(too_big)}")
 
 
-def run(spec: DocSpec, profile: Profile, settings: Settings, conn, embedder, cache_root: Path) -> Report:
+def run(
+    spec: DocSpec, profile: Profile, settings: Settings, conn, embedder, cache_root: Path, summarizer: Summarizer | None = None
+) -> Report:
     report = Report(spec.slug, spec.title)
     prepared = prepare(spec)
     result = profile(spec, prepared)
     cited = attach_footnotes(result.chunks, prepared.notes, report)
     chunks = result.chunks + note_chunks(prepared.notes.notes, result.sections, cited)
+    if spec.summaries and summarizer is not None:
+        chunks += summarizer(spec, result.sections)
     paths = {s.key: s.path for s in result.sections}
     texts = [build_embed_text(spec.title, paths[c.section_key], c.page_start, c.page_end, c.kind, c.content) for c in chunks]
     check_token_limit(texts, chunks)

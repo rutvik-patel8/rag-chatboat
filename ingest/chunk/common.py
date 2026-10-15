@@ -21,6 +21,11 @@ def count_tokens(text: str) -> int:
     return len(_encoding().encode(text))
 
 
+def truncate_tokens(text: str, max_tokens: int) -> str:
+    tokens = _encoding().encode(text)
+    return text if len(tokens) <= max_tokens else _encoding().decode(tokens[:max_tokens])
+
+
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])")
 
 
