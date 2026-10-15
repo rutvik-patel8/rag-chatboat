@@ -5,22 +5,44 @@ single 350-token passage.
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 
 from cache import JsonCache
 from chunk.common import count_tokens, truncate_tokens
 from model import ChunkDraft, SectionDraft
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 MIN_TOKENS = 300
 MAX_INPUT_TOKENS = 6000
 PROMPT = """You summarize one section of the report "{doc}".
-Write 3-5 sentences using only facts stated in the text below. Keep key figures with their units and years.
-Do not add outside knowledge or opinions.
+Write 3-5 sentences of plain prose using only facts stated in the text below. Keep key figures with their units
+and years. Do not add outside knowledge or opinions. No preamble (start directly with the content), no bullet points,
+no headings.
 
 Section: {path}
 
 {text}"""
+
+
+_PREAMBLE_LINE = re.compile(r"^(?:here is|here's|below is)\b[^\n]*:\s*\n+", re.I)
+_LEAD_IN = re.compile(r"^(?:based on|according to) the (?:provided |given )?(?:text|section)[^,]*,\s*", re.I)
+_BULLET = re.compile(r"^\s*(?:[*\-•]|\d+\.)\s+", re.M)
+
+
+def clean_summary(text: str) -> str:
+    """Drop chatty preambles ("Here is a summary:") and flatten bullet lists into prose."""
+    text = _PREAMBLE_LINE.sub("", text.strip())
+    stripped = _LEAD_IN.sub("", text)
+    if stripped != text:  # "Based on the text, debt rose" → "Debt rose"
+        text = stripped[:1].upper() + stripped[1:]
+    if _BULLET.search(text):
+        text = " ".join(_BULLET.sub("", line).strip() for line in text.splitlines() if line.strip())
+    return text.strip()
+
+
+def _is_quota(exc: Exception) -> bool:
+    return getattr(exc, "code", None) == 429 or "RESOURCE_EXHAUSTED" in str(exc)
 
 
 def subtree_texts(sections: list[SectionDraft]) -> dict[str, str]:
@@ -40,10 +62,12 @@ def subtree_texts(sections: list[SectionDraft]) -> dict[str, str]:
 def summary_chunks(
     doc_title: str, sections: list[SectionDraft], generator, cache: JsonCache, model: str, warnings: list[str] | None = None
 ) -> list[ChunkDraft]:
-    """After the first generation failure (e.g. a daily quota) no more calls are made; cached summaries still count."""
+    """A quota error stops further calls for this run; any other failure skips just that section. Cached summaries
+    always count, so a rerun fills the gaps."""
     texts = subtree_texts(sections)
     chunks = []
     failure: Exception | None = None
+    quota_hit = False
     skipped = 0
     for section in sections:
         text = texts[section.key]
@@ -52,12 +76,13 @@ def summary_chunks(
         prompt = PROMPT.format(doc=doc_title, path=section.path, text=truncate_tokens(text, MAX_INPUT_TOKENS))
         key = JsonCache.key(model, PROMPT_VERSION, prompt)
         summary = cache.get(key)
-        if summary is None and failure is None:
+        if summary is None and not quota_hit:
             try:
-                summary = generator.generate(prompt)
+                summary = clean_summary(generator.generate(prompt))
                 cache.put(key, summary)
             except Exception as exc:
                 failure = exc
+                quota_hit = _is_quota(exc)
         if summary is None:
             skipped += 1
             continue

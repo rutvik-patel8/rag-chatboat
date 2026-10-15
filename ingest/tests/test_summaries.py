@@ -86,3 +86,35 @@ def test_generation_failure_keeps_cached_summaries_and_stops_calling(tmp_path):
     assert failing.calls == 1  # ch2's prompt changed (new child), so it fails; ssa is not even tried
     assert [c.section_key for c in chunks] == ["sar"]
     assert warnings == ["2 section summaries skipped (429 RESOURCE_EXHAUSTED daily quota); re-run ingest.py later to fill them in"]
+
+
+class BlocksFirstPrompt:
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, prompt):
+        self.calls += 1
+        if self.calls == 1:
+            raise ValueError("response blocked by safety filters")
+        return "Growth slows."
+
+
+def test_a_non_quota_failure_skips_only_that_section(tmp_path):
+    warnings = []
+    chunks = summary_chunks("GEP", tree(), BlocksFirstPrompt(), JsonCache(tmp_path, "gep/summaries"), "m", warnings)
+    assert [c.section_key for c in chunks] == ["sar"]
+    assert warnings == ["1 section summaries skipped (response blocked by safety filters); re-run ingest.py later to fill them in"]
+
+
+def test_prompt_forbids_preambles_and_bullets(tmp_path):
+    generator = FakeGenerator()
+    summary_chunks("GEP", tree(), generator, JsonCache(tmp_path, "gep/summaries"), "m")
+    assert "No preamble" in generator.prompts[0] and "no bullet points" in generator.prompts[0]
+
+
+def test_preambles_and_bullets_are_cleaned_up():
+    from enrich.summaries import clean_summary
+
+    assert clean_summary("Here is a 4-sentence summary:\n\nDebt rose to 70 percent.") == "Debt rose to 70 percent."
+    assert clean_summary("Based on the provided text, debt rose.") == "Debt rose."
+    assert clean_summary("* Debt rose.\n* Spreads widened.") == "Debt rose. Spreads widened."
