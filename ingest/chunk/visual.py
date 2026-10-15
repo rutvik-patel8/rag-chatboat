@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from dataclasses import replace
 
 from chunk.common import Paragraph, pack, paragraphs_from_pages
 from model import ChunkDraft, Page, Ref, SectionDraft
@@ -63,6 +64,32 @@ def table_notes(block: dict, notes: list) -> list[int]:
     return [note.n for note in notes if sum(label in note.text for label in labels) >= 2]
 
 
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", " ", text).lower()
+
+
+def attach_missing_refs(page: Page, paragraphs: list[Paragraph], indices: list[int], page_chunks: list[ChunkDraft]) -> None:
+    """Vision sometimes drops a footnote marker entirely; the text layer still has it. Attach each missing ref to
+    the block holding the words just before the marker, else to the page's first paragraph or chunk."""
+    seen = {r.n for i in indices for r in paragraphs[i].refs} | {n for c in page_chunks for _, n in c.refs}
+    for line in page.lines:
+        for ref in line.refs:
+            if ref.n in seen:
+                continue
+            before = _squash(line.text[: ref.offset])[-25:].strip()
+            index = next((i for i in indices if before and before in _squash(paragraphs[i].text)), None)
+            chunk = next((c for c in page_chunks if before and before in _squash(c.content)), None) if index is None else None
+            if index is None and chunk is None:
+                index = indices[0] if indices else None
+                chunk = page_chunks[0] if index is None and page_chunks else None
+            if index is not None:
+                p = paragraphs[index]
+                paragraphs[index] = replace(p, refs=p.refs + (Ref(page.number, ref.n, len(p.text)),))
+            elif chunk is not None:
+                chunk.refs = chunk.refs + ((page.number, ref.n),)
+            seen.add(ref.n)
+
+
 def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
     pages = prepared.pages
     raw = {p.number: p for p in prepared.raw_pages}
@@ -90,6 +117,7 @@ def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
             continue
         page_numbers = numbers(" ".join(l.text for l in raw.get(page.number, page).lines))
         endnotes = page.number in spec.endnote_pages
+        first_paragraph, first_chunk = len(paragraphs[current.key]), len(chunks)
         for block in blocks:
             if endnotes and block["kind"] != "table":
                 continue  # endnote text is already indexed as footnote chunks by the pipeline
@@ -106,6 +134,9 @@ def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
             else:
                 metadata = {"estimated": True} if any(v["estimated"] for v in block["values"]) else {}
                 chunks.append(ChunkDraft(current.key, block["kind"], block_content(block), page.number, page.number, refs=refs, metadata=metadata))
+        if not endnotes:
+            indices = list(range(first_paragraph, len(paragraphs[current.key])))
+            attach_missing_refs(page, paragraphs[current.key], indices, chunks[first_chunk:])
     for section in sections:
         section.content = "\n\n".join(p.text for p in paragraphs[section.key]) or None
         for packed in pack(paragraphs[section.key], TARGET_TOKENS, OVERLAP_TOKENS):

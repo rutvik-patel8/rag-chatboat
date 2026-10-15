@@ -121,3 +121,15 @@ def test_fallback_survives_exceptions_without_a_message():
     prepared.describe = describe
     result = build(DOCS["imac"], prepared)
     assert "p5: vision failed (TimeoutError); used the text layer" in result.warnings
+
+
+def test_every_text_layer_marker_reaches_a_chunk_on_its_page(imac):
+    result, _, prepared = imac
+    for page in prepared.pages:
+        if page.number in DOCS["imac"].endnote_pages:
+            continue
+        expected = {ref.n for line in page.lines for ref in line.refs}
+        cited = {n for c in result.chunks for p, n in c.refs if p == page.number}
+        assert expected <= cited, (page.number, expected - cited)
+    claim = next(c for c in result.chunks if c.page_start == 5 and "Zero Waste" in c.content)
+    assert (5, 16) in claim.refs
