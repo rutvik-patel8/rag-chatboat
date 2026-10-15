@@ -108,3 +108,16 @@ def test_vision_failure_falls_back_to_the_text_layer():
     result = build(DOCS["imac"], prepared)
     assert [w for w in result.warnings if w.startswith("p5: vision failed")]
     assert [c for c in result.chunks if c.kind == "text" and c.page_start == 5 and "Apple Supplier Code of Conduct" in c.content]
+
+
+def test_fallback_survives_exceptions_without_a_message():
+    prepared = prepare(DOCS["imac"])
+
+    def describe(page_number):
+        if page_number == 5:
+            raise TimeoutError()
+        return [clean_block(b) for b in FIXTURE[str(page_number)]]
+
+    prepared.describe = describe
+    result = build(DOCS["imac"], prepared)
+    assert "p5: vision failed (TimeoutError); used the text layer" in result.warnings

@@ -83,7 +83,8 @@ def build(spec: DocSpec, prepared: Prepared) -> BuildResult:
             try:
                 blocks = prepared.describe(page.number)
             except Exception as exc:
-                warnings.append(f"p{page.number}: vision failed ({str(exc).splitlines()[0][:100]}); used the text layer")
+                reason = (str(exc).splitlines() or [type(exc).__name__])[0][:100]
+                warnings.append(f"p{page.number}: vision failed ({reason}); used the text layer")
         if blocks is None:
             paragraphs[current.key] += paragraphs_from_pages([page], prepared.vocab or None)
             continue
