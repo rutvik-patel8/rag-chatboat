@@ -125,3 +125,157 @@ def table_pieces(title: str, lines: list[Line], page: Page, layout: GepLayout) -
     budget = TABLE_TOKENS - count_tokens(title) - 10
     pieces = [f"{title}\n\n{md}" for md in split_table(rows, header_rows, budget, count_tokens)]
     return pieces, (f"{title}\n\n{notes}" if notes else "")
+
+
+class _Outline:
+    """The section tree as headings arrive in reading order, plus the body lines filed under it."""
+
+    def __init__(self, root: SectionDraft, layout: GepLayout):
+        self.layout = layout
+        self.root = root
+        self.sections: list[SectionDraft] = [root]
+        self.by_key = {"root": root}
+        self.body: dict[str, list[tuple[int, Line]]] = defaultdict(list)
+        self.boxes: dict[str, SectionDraft] = {}
+        self.l1, self.l2, self.l3, self.l4 = root, None, None, None
+        self.box: SectionDraft | None = None
+        self.box_leaf: SectionDraft | None = None
+        self.last: tuple[SectionDraft, Line, str] | None = None  # heading just opened, until body text follows
+
+    def add(self, level: int, title: str, page_no: int, parent: SectionDraft, kind: str = "section") -> SectionDraft:
+        path = title if parent is self.root else f"{parent.path} › {title}"
+        section = SectionDraft(f"s{len(self.sections)}", title, level, path, page_no, page_no, parent.key, kind)
+        self.sections.append(section)
+        self.by_key[section.key] = section
+        return section
+
+    def chapter_leaf(self) -> SectionDraft:
+        return self.l4 or self.l3 or self.l2 or self.l1
+
+    def open_l1(self, title: str, page_no: int, kind: str) -> None:
+        self.l1, self.l2, self.l3, self.l4 = self.add(1, title, page_no, self.root, kind), None, None, None
+        self.box = self.box_leaf = None
+        self.last = None
+
+    def _continues(self, line: Line, role: str) -> bool:
+        """A wrapped heading: same role, directly below the line just opened."""
+        return self.last is not None and self.last[2] == role and 0 <= line.bbox[1] - self.last[1].bbox[3] < 0.6 * line.size
+
+    def _extend(self, line: Line, role: str) -> None:
+        section = self.last[0]
+        section.title = f"{section.title} {line.text}"
+        parent = self.by_key[section.parent_key]
+        section.path = section.title if parent is self.root else f"{parent.path} › {section.title}"
+        if section.title in self.layout.regions:
+            section.kind = "region"
+        self.last = (section, line, role)
+
+    def section_heading(self, line: Line, page_no: int) -> None:
+        title = line.text
+        if self._continues(line, "section") and not title.startswith("ANNEX "):
+            return self._extend(line, "section")
+        if self.l2 is not None and title.endswith(" (continued)") and self.l2.title == title.removesuffix(" (continued)"):
+            self.last = (self.l2, line, "section")
+            return
+        kind = "region" if title in self.layout.regions else "annex" if title.startswith("ANNEX ") else "section"
+        self.l2, self.l3, self.l4 = self.add(2, title, page_no, self.l1, kind), None, None
+        self.box = self.box_leaf = None
+        self.last = (self.l2, line, "section")
+
+    def box_title(self, line: Line, number: str, page_no: int) -> None:
+        box = self.boxes.get(number)
+        if box is None:
+            box = self.boxes[number] = self.add(2, line.text, page_no, self.l1, "box")
+        if self.box is not box:  # later pages of a box repeat its title as a running header
+            self.box = self.box_leaf = box
+        self.last = None
+
+    def sub_heading(self, line: Line, role: str, page_no: int, next_body_role: str | None) -> None:
+        if self._continues(line, role):
+            return self._extend(line, role)
+        if role == "subsection" and self.box is not None and next_body_role == "box_text":
+            self.box_leaf = opened = self.add(3, line.text, page_no, self.box)
+        elif role == "subsection":
+            parent = self.l2 or self.l1
+            self.l3, self.l4 = self.add(parent.level + 1, line.text, page_no, parent), None
+            opened = self.l3
+        else:
+            parent = self.l3 or self.l2 or self.l1
+            self.l4 = opened = self.add(parent.level + 1, line.text, page_no, parent)
+        self.last = (opened, line, role)
+
+    def body_line(self, line: Line, role: str, page_no: int) -> None:
+        target = self.box_leaf if role == "box_text" and self.box is not None else self.chapter_leaf()
+        self.body[target.key].append((page_no, line))
+        self.last = None
+
+
+def build(spec: DocSpec, prepared: Prepared, layout: GepLayout = GEP_LAYOUT) -> BuildResult:
+    chapters = chapter_starts(spec.path)
+    pages = prepared.pages
+    outline = _Outline(SectionDraft("root", spec.title, 0, "", pages[0].number, pages[-1].number), layout)
+    chunks: list[ChunkDraft] = []
+
+    for page in pages:
+        if page.number in chapters:
+            outline.open_l1(chapters[page.number], page.number, "annex" if chapters[page.number] == "Statistical Annex" else "section")
+        objects: list[tuple[float, str, SectionDraft]] = []  # FIGURE/TABLE titles on this page: (y, title, section)
+        graphics: list[Line] = []
+        roles = [line_role(line, layout) for line in page.lines]
+        for i, (line, role) in enumerate(zip(page.lines, roles)):
+            if role == "front":
+                outline.open_l1(line.text, page.number, "front")
+            elif role == "section":
+                outline.section_heading(line, page.number)
+            elif role == "object":
+                label, number = _OBJECT.match(line.text).groups()
+                if label == "BOX":
+                    outline.box_title(line, number, page.number)
+                else:
+                    in_box = number.startswith("B") and outline.box is not None
+                    objects.append((line.bbox[1], line.text, outline.box if in_box else outline.chapter_leaf()))
+            elif role in ("subsection", "minor"):
+                next_body = next((r for r in roles[i + 1 :] if r in ("text", "box_text")), None)
+                outline.sub_heading(line, role, page.number, next_body)
+            elif role == "graphic":
+                graphics.append(line)
+            else:
+                outline.body_line(line, role, page.number)
+
+        def emit_table(title: str, members: list[Line], target: SectionDraft) -> None:
+            pieces, notes = table_pieces(title, members, page, layout)
+            chunks.extend(ChunkDraft(target.key, "table", piece, page.number, page.number) for piece in pieces)
+            if notes:
+                chunks.append(ChunkDraft(target.key, "caption", notes, page.number, page.number))
+
+        if page.number in layout.annex_table_pages and outline.l2 is not None:
+            emit_table(outline.l2.title, graphics, outline.l2)
+            continue
+        objects.sort(key=lambda o: o[0])
+        for idx, (y, title, target) in enumerate(objects):  # each graphic line belongs to the title above it
+            end = objects[idx + 1][0] if idx + 1 < len(objects) else float("inf")
+            members = [l for l in graphics if y - 1 <= l.bbox[1] < end - 1 and l.text != title]
+            if title.startswith("FIGURE"):
+                chunks.append(ChunkDraft(target.key, "chart", figure_text(title, members, layout), page.number, page.number))
+            else:
+                emit_table(title, members, target)
+
+    vocab = prepared.vocab or None
+    for section in outline.sections:
+        if section.title in layout.excluded_titles:  # bibliographies would swamp keyword search with author names
+            continue
+        grouped: dict[int, list[Line]] = defaultdict(list)
+        for page_no, line in outline.body[section.key]:
+            grouped[page_no].append(line)
+        pseudo = [Page(n, pages[0].width, pages[0].height, tuple(ls)) for n, ls in sorted(grouped.items())]
+        paragraphs = paragraphs_from_pages(pseudo, vocab)
+        section.content = "\n\n".join(p.text for p in paragraphs) or None
+        for packed in pack(paragraphs, TARGET_TOKENS, OVERLAP_TOKENS):
+            chunks.append(ChunkDraft(section.key, "text", packed.text, packed.page_start, packed.page_end, refs=packed.refs))
+    for chunk in chunks:  # a section spans its own and its descendants' pages
+        section = outline.by_key[chunk.section_key]
+        while section is not outline.root:
+            section.page_start = min(section.page_start, chunk.page_start)
+            section.page_end = max(section.page_end, chunk.page_end)
+            section = outline.by_key[section.parent_key]
+    return BuildResult(outline.sections, chunks)
