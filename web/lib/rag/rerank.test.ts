@@ -28,6 +28,13 @@ describe("rerank", () => {
     const prompt = rerankPrompt("Growth in South Asia?", [candidate(7, { content: "Growth in SAR is expected to soften." })]);
     expect(prompt).toContain("[7] Global Economic Prospects › Ch. 2 Regional Outlooks › South Asia (p.96, text)\nGrowth in SAR is expected to soften.");
   });
+
+  it("shows the whole passage, so facts late in a chunk can be scored", () => {
+    const content = `${"Chemistry and longevity. ".repeat(50)}The stand uses 100 percent recycled aluminum.`;
+    const prompt = rerankPrompt("What is the stand made of?", [candidate(7, { docTitle: "iMac Report", sectionPath: "", content })]);
+    expect(prompt).toContain("[7] iMac Report (p.96, text)\n");
+    expect(prompt).toContain("The stand uses 100 percent recycled aluminum.");
+  });
 });
 
 describe("selectRelevant", () => {

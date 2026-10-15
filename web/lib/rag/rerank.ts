@@ -1,9 +1,9 @@
+import { sectionLabel } from "@/lib/rag/context";
 import type { Candidate } from "@/lib/rag/retrieve";
 import { generateJson, type GenClient } from "@/lib/rag/genai";
 
 export const KEEP = 8;
 export const MIN_RELEVANCE = 2;
-const SNIPPET = 700;
 const SCHEMA = {
   type: "object",
   properties: {
@@ -17,7 +17,7 @@ const SCHEMA = {
 
 export function rerankPrompt(question: string, candidates: Candidate[]): string {
   const passages = candidates
-    .map((c) => `[${c.id}] ${c.docTitle} › ${c.sectionPath} (p.${c.pageStart}, ${c.kind})\n${c.content.slice(0, SNIPPET)}`)
+    .map((c) => `[${c.id}] ${sectionLabel(c.docTitle, c.sectionPath)} (p.${c.pageStart}, ${c.kind})\n${c.content}`) // whole chunks: facts often sit late
     .join("\n\n");
   return (
     "Score how well each passage answers the question: 3 = answers it directly, 2 = contains needed facts, " +
