@@ -7,8 +7,18 @@ export type HealthResult = {
 
 /** Node's connection errors are often AggregateErrors with an empty message but a `code`. */
 export function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message || (err as { code?: string }).code || err.name;
-  return String(err);
+  if (!(err instanceof Error)) return String(err);
+  return geminiMessage(err.message) ?? (err.message || (err as { code?: string }).code || err.name);
+}
+
+/** @google/genai puts the whole JSON body in the message: {"error":{"code":503,"message":"…","status":"UNAVAILABLE"}}. */
+function geminiMessage(message: string): string | undefined {
+  try {
+    const { error } = JSON.parse(message) as { error?: { code?: number; message?: string; status?: string } };
+    return error?.message ? `${error.message} (${[error.code, error.status].filter(Boolean).join(" ")})` : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runHealthCheck(

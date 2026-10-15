@@ -81,10 +81,10 @@ describe("answer", () => {
   it("reports a generation failure as an error event", async () => {
     const events = await run(deps({
       async *generate() {
-        throw new Error("quota exceeded");
+        throw new Error('{"error":{"code":429,"message":"Quota exceeded.","status":"RESOURCE_EXHAUSTED"}}');
       },
     }));
-    expect(events.at(-1)).toEqual({ type: "error", message: "answer generation failed: quota exceeded" });
+    expect(events.at(-1)).toEqual({ type: "error", message: "answer generation failed: Quota exceeded. (429 RESOURCE_EXHAUSTED)" });
   });
 
   it("rewrites follow-up questions before routing", async () => {

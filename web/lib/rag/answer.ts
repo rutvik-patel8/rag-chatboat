@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/rag/health";
 import { buildBlocks, formatSources, sectionLabel, type SourceBlock } from "@/lib/rag/context";
 import { SYSTEM_PROMPT, userPrompt } from "@/lib/rag/prompt";
 import { selectRelevant } from "@/lib/rag/rerank";
@@ -81,7 +82,7 @@ export async function answer(request: ChatRequest, deps: Deps, emit: (event: Cha
       emit({ type: "text", delta });
     }
   } catch (error) {
-    emit({ type: "error", message: `answer generation failed: ${error instanceof Error ? error.message : String(error)}` });
+    emit({ type: "error", message: `answer generation failed: ${errorMessage(error)}` });
     return;
   }
   warnings.push(...verifyAnswer(text, blocks));

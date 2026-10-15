@@ -37,6 +37,11 @@ describe("errorMessage", () => {
     expect(errorMessage(err)).toBe("ECONNREFUSED");
   });
 
+  it("unwraps the JSON body of a Gemini API error", () => {
+    const err = new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}');
+    expect(errorMessage(err)).toBe("This model is currently experiencing high demand. (503 UNAVAILABLE)");
+  });
+
   it("stringifies non-Error values", () => {
     expect(errorMessage("boom")).toBe("boom");
   });
