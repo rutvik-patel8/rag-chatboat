@@ -23,9 +23,10 @@ const catalog = memoCatalog(() => loadCatalog(getPool()));
 
 /**
  * Production wiring: Postgres, Gemini embeddings, the utility model for helpers and the chat model for answers.
- * `signal` (the client went away) cancels the Gemini calls of this request.
+ * `signal` (the client went away) cancels the Gemini calls of this request; `chatModel` overrides the answer model
+ * (the evaluation's ablation runs answer with the utility model).
  */
-export function productionDeps(signal?: AbortSignal): Deps {
+export function productionDeps(signal?: AbortSignal, { chatModel }: { chatModel?: string } = {}): Deps {
   const env = getEnv();
   const client = getGenAI() as unknown as GenClient;
   const helper = utilityModel(env);
@@ -43,6 +44,6 @@ export function productionDeps(signal?: AbortSignal): Deps {
     search: (args) => hybridSearch(getPool(), args),
     rerank: (question, candidates) => rerank(client, helper, question, candidates, signal),
     neighbours: (picked) => loadNeighbours(getPool(), picked),
-    generate: (system, prompt) => streamText(client, env.GEMINI_CHAT_MODEL, system, prompt, { signal }),
+    generate: (system, prompt) => streamText(client, chatModel ?? env.GEMINI_CHAT_MODEL, system, prompt, { signal }),
   };
 }

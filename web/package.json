@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:int": "RUN_INTEGRATION=1 vitest run",
-    "test:live": "RUN_LIVE=1 vitest run"
+    "test:live": "RUN_LIVE=1 vitest run",
+    "eval": "tsx scripts/eval.ts"
   },
   "dependencies": {
     "@google/genai": "^2.29.1",
@@ -29,7 +30,9 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "yaml": "^2.8.1"
   }
 }

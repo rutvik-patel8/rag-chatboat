@@ -40,3 +40,24 @@ describe("verifyAnswer on a refusal", () => {
     expect(verifyAnswer("I couldn't find this in the documents.", [{ id: 1, label: "[S1] GEP", text: "Growth 6.3" }])).toEqual([]);
   });
 });
+
+describe("verifyAnswer with grouped citations", () => {
+  it("reads [S1, S2] as citing both sources", () => {
+    const sources = [{ id: 1, label: "[S1] GEP", text: "Growth 4.2" }, { id: 2, label: "[S2] GEP", text: "China 4.4" }];
+    expect(verifyAnswer("EAP 4.2 and China 4.4 [S1, S2].", sources)).toEqual([]);
+    expect(verifyAnswer("China 4.4 [S1; S3].", sources)).toEqual(["cites unknown sources: S3", "unverified figures: 4.4"]);
+  });
+});
+
+describe("verifyAnswer with references to footnotes, tables and chapters", () => {
+  it("treats 'footnote 18', 'Table 2.9' or 'Chapter 3' as labels, not figures (real answer, eval 2026-10-19)", () => {
+    const sources = [{
+      id: 1, label: "[S1] iMac Report › Use | p.7 | text",
+      text: "iMac uses 58 percent less energy than the requirement for ENERGY STAR.18\n\nFootnotes:\n18. Energy consumption values are based on the ENERGY STAR Program Requirements.",
+    }];
+    const answer = "iMac uses 58 percent less energy than the requirement for ENERGY STAR [S1]. Footnote 18 states that the values are based on the ENERGY STAR Program Requirements [S1].";
+    expect(verifyAnswer(answer, sources)).toEqual([]);
+    expect(numbersIn("See Table 2.9, Box 1.1, Figure 2.3.A, endnote 10 and Chapter 3: growth is 6.3 percent.")).toEqual(["6.3"]);
+    expect(verifyAnswer("Growth is 9.9 percent, per footnote 18 [S1].", sources)).toEqual(["unverified figures: 9.9"]);
+  });
+});

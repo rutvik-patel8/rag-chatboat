@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeQuestion, type Catalog } from "@/lib/rag/router";
+import { routeQuestion, scopeRoute, type Catalog } from "@/lib/rag/router";
 
 const CH2 = "Ch. 2 Regional Outlooks";
 const catalog: Catalog = {
@@ -43,6 +43,11 @@ describe("routeQuestion", () => {
     expect(routeQuestion("How many depository libraries did GPO visit?", "all", catalog)).toEqual({ docs: ["gpo"], paths: [] });
     expect(routeQuestion("How much less energy does iMac use than ENERGY STAR?", "all", catalog).docs).toEqual(["imac"]);
     expect(routeQuestion("What changed this year?", "all", catalog).docs).toEqual(["gpo", "imac", "gep"]);
+  });
+
+  it("scopeRoute searches the scope's documents with no section filters (the noRouter ablation)", () => {
+    expect(scopeRoute("gep", catalog)).toEqual({ docs: ["gep"], paths: [] });
+    expect(scopeRoute("all", catalog)).toEqual({ docs: ["gpo", "imac", "gep"], paths: [] });
   });
 
   it("an explicit scope wins and never adds GEP filters to other documents", () => {

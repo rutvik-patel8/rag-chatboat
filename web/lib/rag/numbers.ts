@@ -3,8 +3,10 @@
 const NUMBER = /(?<![\w.])[-−–]?\d[\d,]*(?:\.\d+)?/g;
 const CITATION = /\[S\d+\]/g;
 const LIST_MARKER = /^\s*\d+[.)]\s+/gm; // "1. Trade tensions" numbers a list item, not a figure
+// "footnote 18", "Table 2.9", "Box 1.1", "Figure 2.3.A", "Chapter 3" name a part of the report, not a figure
+const REFERENCE = /\b(?:(?:foot|end)?notes?|figure|table|box|chapter|annex)\s+[A-Z]?\d+(?:\.\d+)*(?:\.[A-Z])?\b/gi;
 
 export function numbersIn(text: string): string[] {
-  const matches = text.replace(CITATION, " ").replace(LIST_MARKER, "").match(NUMBER) ?? [];
+  const matches = text.replace(CITATION, " ").replace(REFERENCE, " ").replace(LIST_MARKER, "").match(NUMBER) ?? [];
   return matches.map((raw) => String(Number(raw.replace(/[−–]/, "-").replace(/,/g, ""))));
 }

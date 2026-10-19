@@ -18,7 +18,10 @@ export type Candidate = {
   kwRank: number | null;
 };
 
-export type SearchArgs = { vector: number[]; question: string; docs: string[]; paths: string[]; limit?: number };
+export type SearchArgs = {
+  vector: number[]; question: string; docs: string[]; paths: string[]; limit?: number;
+  keyword?: boolean; // false: vector search only (the vectorOnly ablation)
+};
 
 /** Keyword side of hybrid search: any question word may match (OR), ranked by coverage. */
 export function keywordQuery(question: string): string {
@@ -67,9 +70,9 @@ export function toCandidate(row: Row): Candidate {
   };
 }
 
-export async function hybridSearch(pool: Pool, { vector, question, docs, paths, limit = 20 }: SearchArgs): Promise<Candidate[]> {
+export async function hybridSearch(pool: Pool, { vector, question, docs, paths, limit = 20, keyword = true }: SearchArgs): Promise<Candidate[]> {
   const { rows } = await pool.query<Row>(HYBRID_SQL, [
-    `[${vector.join(",")}]`, keywordQuery(question), docs, paths.length ? paths : null, limit,
+    `[${vector.join(",")}]`, keyword ? keywordQuery(question) : null, docs, paths.length ? paths : null, limit, // NULL query: no keyword rows
   ]);
   return rows.map(toCandidate);
 }

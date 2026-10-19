@@ -29,6 +29,13 @@ describe("buildBlocks", () => {
   });
 });
 
+describe("buildBlocks without footnotes", () => {
+  it("leaves footnotes out when asked (the noFootnotes ablation)", () => {
+    const [block] = buildBlocks([candidate(5, { content: "text", footnotes: [{ n: 18, text: "note" }] })], new Map(), undefined, { footnotes: false });
+    expect(block.text).toBe("text");
+  });
+});
+
 describe("sectionLabel", () => {
   it("names the document alone for text outside any section", () => {
     expect(sectionLabel("iMac Report", "")).toBe("iMac Report");

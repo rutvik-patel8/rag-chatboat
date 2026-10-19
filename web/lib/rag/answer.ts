@@ -1,13 +1,15 @@
 import { errorMessage } from "@/lib/rag/health";
 import { buildBlocks, formatSources, sectionLabel, type SourceBlock } from "@/lib/rag/context";
 import { SYSTEM_PROMPT, userPrompt } from "@/lib/rag/prompt";
-import { selectRelevant } from "@/lib/rag/rerank";
+import { KEEP, selectRelevant } from "@/lib/rag/rerank";
 import type { Candidate, SearchArgs } from "@/lib/rag/retrieve";
-import { routeQuestion, type Catalog, type Route, type Scope } from "@/lib/rag/router";
+import { routeQuestion, scopeRoute, type Catalog, type Route, type Scope } from "@/lib/rag/router";
 import { verifyAnswer } from "@/lib/rag/verify";
 
 export type Turn = { role: "user" | "assistant"; content: string };
-export type ChatRequest = { question: string; scope: Scope; history: Turn[] };
+/** Ablation switches (spec §8.3), accepted only outside production: each turns off one technique. */
+export type Options = { vectorOnly?: boolean; noRerank?: boolean; noRouter?: boolean; noFootnotes?: boolean };
+export type ChatRequest = { question: string; scope: Scope; history: Turn[]; options?: Options };
 export type SourceInfo = {
   id: number; slug: string; doc: string; sectionPath: string; pageStart: number; pageEnd: number; kind: string; snippet: string;
   text: string; // the whole block the model saw, for the sources drawer
@@ -51,17 +53,19 @@ export async function answer(request: ChatRequest, deps: Deps, emit: (event: Cha
   const warnings: string[] = [];
   const question = await deps.condense(request.history, request.question);
   const catalog = await deps.catalog();
-  const route = routeQuestion(question, request.scope, catalog);
-  const candidates = await deps.search({ vector: await deps.embed(question), question, docs: route.docs, paths: route.paths });
+  const options = request.options ?? {};
+  const route = options.noRouter ? scopeRoute(request.scope, catalog) : routeQuestion(question, request.scope, catalog);
+  const vector = await deps.embed(question);
+  const candidates = await deps.search({ vector, question, docs: route.docs, paths: route.paths, keyword: !options.vectorOnly });
   let scores: Map<number, number> | null = null;
-  if (candidates.length) {
+  if (candidates.length && !options.noRerank) {
     try {
       scores = await deps.rerank(question, candidates);
     } catch {
       warnings.push("reranking failed; using search order");
     }
   }
-  const picked = scores ? selectRelevant(candidates, scores) : candidates.slice(0, 8);
+  const picked = scores ? selectRelevant(candidates, scores) : candidates.slice(0, KEEP);
   const debug: Debug = {
     question, route,
     candidates: candidates.map((c) => ({ chunkId: c.id, vecRank: c.vecRank, kwRank: c.kwRank, rrf: c.score, rerank: scores?.get(c.id) ?? null })),
@@ -72,7 +76,7 @@ export async function answer(request: ChatRequest, deps: Deps, emit: (event: Cha
     emit({ type: "done", warnings, debug });
     return;
   }
-  const blocks = buildBlocks(picked, await deps.neighbours(picked));
+  const blocks = buildBlocks(picked, await deps.neighbours(picked), undefined, { footnotes: !options.noFootnotes });
   const titles = new Map(picked.map((c) => [c.docSlug, c.docTitle]));
   emit({ type: "sources", sources: blocks.map((b) => sourceInfo(b, titles.get(b.docSlug) ?? b.docSlug)) });
   let text = "";

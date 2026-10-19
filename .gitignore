@@ -24,3 +24,6 @@ eval/results/
 .DS_Store
 .idea/
 .vscode/
+
+# evaluation runs (npm run eval)
+eval/results/

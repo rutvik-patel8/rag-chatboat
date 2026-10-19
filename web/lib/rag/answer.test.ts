@@ -109,3 +109,39 @@ describe("SYSTEM_PROMPT", () => {
     expect(SYSTEM_PROMPT).toContain("If none of the sources answer the question, reply only: I couldn't find this in the documents.");
   });
 });
+
+describe("ablation options", () => {
+  it("noRouter drops section filters, vectorOnly drops keyword search, noRerank keeps search order", async () => {
+    let reranked = false;
+    const d = deps({
+      rerank: async () => {
+        reranked = true;
+        return new Map();
+      },
+    });
+    const events: ChatEvent[] = [];
+    const options = { noRouter: true, vectorOnly: true, noRerank: true };
+    await answer({ question: "What is the growth outlook for South Asia?", scope: "gep", history: [], options }, d, (e) => events.push(e));
+    expect(d.searches[0]).toMatchObject({ docs: ["gep"], paths: [], keyword: false });
+    expect(reranked).toBe(false);
+    const sources = events[0] as Extract<ChatEvent, { type: "sources" }>;
+    expect(sources.sources.map((s) => s.id)).toEqual([1, 2]); // both candidates, no relevance gate
+    expect((events.at(-1) as Extract<ChatEvent, { type: "done" }>).warnings).toEqual([]);
+  });
+
+  it("noFootnotes leaves footnotes out of the sources the model sees", async () => {
+    const prompts: string[] = [];
+    const d = deps({
+      search: async () => [candidate(1, { content: "Uses 58 percent less energy.18", footnotes: [{ n: 18, text: "ENERGY STAR test." }] })],
+      rerank: async () => new Map([[1, 3]]),
+      async *generate(_system, prompt) {
+        prompts.push(prompt);
+        yield "58 percent less [S1].";
+      },
+    });
+    await answer({ question: "q", scope: "imac", history: [], options: { noFootnotes: true } }, d, () => {});
+    await answer({ question: "q", scope: "imac", history: [] }, d, () => {});
+    expect(prompts[0]).not.toContain("ENERGY STAR test.");
+    expect(prompts[1]).toContain("Footnotes:\n18. ENERGY STAR test.");
+  });
+});
