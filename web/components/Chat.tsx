@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { AssistantBubble } from "@/components/AssistantBubble";
+import { DOCS, DocMark, docStyle } from "@/components/docs";
 import { SourcesDrawer } from "@/components/SourcesDrawer";
 import { askChat } from "@/lib/chat/stream";
 import { applyEvent, emptyAnswer, historyFor, type AssistantMessage, type Message } from "@/lib/chat/thread";
@@ -48,6 +49,7 @@ export function Chat() {
   const [drawer, setDrawer] = useState<{ message: number; source: number } | null>(null);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   const last = messages.at(-1);
   const busy = last?.role === "assistant" && last.status === "streaming";
 
@@ -72,89 +74,163 @@ export function Chat() {
     abort.current = null;
   }
 
+  function reset() {
+    setMessages([]);
+    setDrawer(null);
+    field.current?.focus();
+  }
+
+  /** Arrow keys move the selection between documents, as in any radio group. */
+  function onScopeKey(e: KeyboardEvent<HTMLButtonElement>) {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const next = (SCOPES.findIndex((s) => s.value === scope) + step + SCOPES.length) % SCOPES.length;
+    setScope(SCOPES[next].value);
+    (e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+  }
+
   const drawerMessage = drawer ? messages[drawer.message] : undefined;
 
+  const placeholder = scope === "all" ? "Ask about any of the three reports…" : `Ask about the ${DOCS[scope].title}…`;
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4">
-      <header className="sticky top-0 z-0 flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-background py-3 dark:border-zinc-800">
-        <h1 className="mr-auto text-lg font-semibold">Document Q&amp;A</h1>
-        <div role="radiogroup" aria-label="Document" className="flex flex-wrap gap-1 text-sm">
+    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 sm:px-6">
+      <header className="sticky top-0 z-10 border-b border-rule bg-paper/90 pt-5 pb-3 backdrop-blur">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-lg leading-tight font-bold tracking-tight">Document Q&amp;A</h1>
+            <p className="text-sm text-muted">Cited answers from three reports</p>
+          </div>
+          <div className="flex items-center gap-4 pt-0.5 text-sm">
+            {messages.length > 0 && (
+              <button type="button" onClick={reset} disabled={busy} className="font-medium text-muted hover:text-ink disabled:opacity-40">
+                New conversation
+              </button>
+            )}
+            <label className="flex cursor-pointer items-center gap-1.5 text-muted hover:text-ink">
+              <input type="checkbox" checked={showDebug} onChange={(e) => setShowDebug(e.target.checked)} className="accent-(--ink)" />
+              Show retrieval
+            </label>
+          </div>
+        </div>
+        <div role="radiogroup" aria-label="Document" className="mt-3 flex flex-wrap gap-1">
           {SCOPES.map((s) => (
             <button
               key={s.value}
               type="button"
               role="radio"
               aria-checked={scope === s.value}
+              tabIndex={scope === s.value ? 0 : -1}
               onClick={() => setScope(s.value)}
-              className={`rounded-full border px-3 py-1 ${scope === s.value ? "border-blue-600 bg-blue-600 text-white" : "border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"}`}
+              onKeyDown={onScopeKey}
+              style={docStyle(s.value)}
+              className={`flex shrink-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${scope === s.value ? "border-(--doc) bg-surface font-semibold shadow-sm" : "border-transparent text-muted hover:bg-surface hover:text-ink"}`}
             >
+              <DocMark scope={s.value} />
               {s.label}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={showDebug} onChange={(e) => setShowDebug(e.target.checked)} />
-          Show retrieval
-        </label>
       </header>
 
-      <main className="flex-1 space-y-4 py-4">
+      <main className="flex flex-1 flex-col py-8">
         {messages.length === 0 && (
-          <div className="space-y-2 text-sm">
-            <p className="text-zinc-500">Ask about the GPO 2018 Annual Report, the World Bank&apos;s Global Economic Prospects (June 2026) or the iMac Product Environmental Report. Try:</p>
-            {EXAMPLES[scope].map((q) => (
-              <button key={q} type="button" onClick={() => send(q)} className="block rounded border border-zinc-300 px-3 py-2 text-left hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-                {q}
-              </button>
-            ))}
+          <div className="my-auto py-6">
+            <h2 className="font-serif text-[2rem] leading-tight">
+              {scope === "all" ? "Ask anything across the three reports" : `Ask the ${DOCS[scope].title}`}
+            </h2>
+            <p className="mt-2 max-w-prose text-muted">
+              Every answer cites the passages it draws on. Click a citation to read the passage and open the page in the PDF.
+            </p>
+            <div className={`mt-8 grid gap-6 ${scope === "all" ? "sm:grid-cols-3" : ""}`}>
+              {(scope === "all" ? (Object.keys(DOCS) as (keyof typeof DOCS)[]) : [scope]).map((doc) => (
+                <section key={doc} style={docStyle(doc)} className="flex flex-col border-l-4 border-(--doc) pl-4">
+                  <h2 className="font-semibold">{DOCS[doc].title}</h2>
+                  <p className="text-sm text-muted">{DOCS[doc].about}</p>
+                  <ul className="mt-2 space-y-1 sm:mt-auto sm:pt-2">
+                    {EXAMPLES[scope].filter((q) => EXAMPLES[doc].includes(q)).map((q) => (
+                      <li key={q}>
+                        <button
+                          type="button"
+                          onClick={() => send(q)}
+                          className="rounded-md px-2 py-1 -ml-2 text-left font-serif text-[1.05rem] text-(--doc) hover:bg-(--doc)/8"
+                        >
+                          {q}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} className="ml-auto max-w-[85%] rounded-lg bg-blue-600 p-3 text-white">
-              <p className="whitespace-pre-wrap">{m.text}</p>
-              <p className="mt-1 text-xs opacity-75">{SCOPES.find((s) => s.value === m.scope)?.label}</p>
+            <div key={i} className={i > 0 ? "mt-8 border-t border-rule pt-8" : ""}>
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <DocMark scope={m.scope} />
+                {SCOPES.find((s) => s.value === m.scope)?.label}
+              </p>
+              <p className="mt-1.5 whitespace-pre-wrap text-lg leading-snug font-semibold">{m.text}</p>
             </div>
           ) : (
-            <AssistantBubble key={i} message={m} showDebug={showDebug} onCite={(source) => setDrawer({ message: i, source })} />
+            <div key={i} className="mt-4">
+              <AssistantBubble message={m} showDebug={showDebug} onCite={(source) => setDrawer({ message: i, source })} />
+            </div>
           ),
         )}
         <div ref={bottom} />
       </main>
 
       <form
-        className="sticky bottom-0 flex gap-2 border-t border-zinc-200 bg-background py-3 dark:border-zinc-800"
+        className="sticky bottom-0 bg-paper pt-2 pb-4"
         onSubmit={(e) => {
           e.preventDefault();
           void send(input);
         }}
       >
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void send(input);
-            }
-          }}
-          maxLength={MAX_QUESTION}
-          rows={2}
-          placeholder="Ask a question… (Enter to send, Shift+Enter for a new line)"
-          aria-label="Question"
-          className="flex-1 resize-none rounded border border-zinc-300 bg-transparent p-2 dark:border-zinc-700"
-        />
-        {busy ? (
-          <button
-            type="button"
-            onClick={(e) => e.detail < 2 && abort.current?.abort()} // a double-clicked Send lands its 2nd click here
-            className="rounded bg-zinc-600 px-4 text-white"
-          >
-            Stop
-          </button>
-        ) : (
-          <button type="submit" disabled={!input.trim()} className="rounded bg-blue-600 px-4 text-white disabled:opacity-50">Send</button>
-        )}
+        <div style={docStyle(scope)} className="rounded-xl border border-rule bg-surface shadow-sm focus-within:border-(--doc)">
+          <textarea
+            ref={field}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void send(input);
+              }
+            }}
+            maxLength={MAX_QUESTION}
+            rows={2}
+            placeholder={placeholder}
+            aria-label="Question"
+            className="field-sizing-content block max-h-48 min-h-[3.25rem] w-full resize-none bg-transparent px-4 pt-3 placeholder:text-muted focus-visible:outline-none"
+          />
+          <div className="flex items-center justify-between gap-3 px-3 pb-2.5 pl-4">
+            <p className="text-xs text-muted">
+              {input.length > MAX_QUESTION * 0.8 ? (
+                <span className={input.length >= MAX_QUESTION ? "text-error-ink" : ""}>{input.length} / {MAX_QUESTION} characters</span>
+              ) : (
+                <span className="hidden sm:inline">Enter to send, Shift+Enter for a new line</span>
+              )}
+            </p>
+            {busy ? (
+              <button
+                type="button"
+                onClick={(e) => e.detail < 2 && abort.current?.abort()} // a double-clicked Send lands its 2nd click here
+                className="rounded-lg border border-rule px-4 py-1.5 text-sm font-semibold hover:bg-paper"
+              >
+                Stop
+              </button>
+            ) : (
+              <button type="submit" disabled={!input.trim()} className="rounded-lg bg-(--doc) px-4 py-1.5 text-sm font-semibold text-surface disabled:opacity-40">
+                Send
+              </button>
+            )}
+          </div>
+        </div>
       </form>
 
       {drawer && drawerMessage?.role === "assistant" && (
