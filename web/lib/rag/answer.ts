@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT, userPrompt } from "@/lib/rag/prompt";
 import { KEEP, selectRelevant } from "@/lib/rag/rerank";
 import type { Candidate, SearchArgs } from "@/lib/rag/retrieve";
 import { routeQuestion, scopeRoute, type Catalog, type Route, type Scope } from "@/lib/rag/router";
+import { smallTalkReply } from "@/lib/rag/smalltalk";
 import { verifyAnswer } from "@/lib/rag/verify";
 
 export type Turn = { role: "user" | "assistant"; content: string };
@@ -50,6 +51,13 @@ function sourceInfo(block: SourceBlock, docTitle: string): SourceInfo {
 
 /** The whole question → answer flow (spec §6), emitting stream events. Every external call comes from `deps`. */
 export async function answer(request: ChatRequest, deps: Deps, emit: (event: ChatEvent) => void): Promise<void> {
+  const reply = smallTalkReply(request.question);
+  if (reply) {
+    emit({ type: "sources", sources: [] });
+    emit({ type: "text", delta: reply });
+    emit({ type: "done", warnings: [], debug: { question: request.question, route: { docs: [], paths: [] }, candidates: [] } });
+    return;
+  }
   const warnings: string[] = [];
   const question = await deps.condense(request.history, request.question);
   const catalog = await deps.catalog();

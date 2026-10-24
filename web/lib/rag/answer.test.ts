@@ -49,6 +49,23 @@ describe("answer", () => {
     expect(done.debug.candidates.map((c) => c.rerank)).toEqual([3, 0]);
   });
 
+  it("replies to a greeting without condensing, searching or generating", async () => {
+    const called: string[] = [];
+    const events = await run(deps({
+      condense: async () => (called.push("condense"), "hello"),
+      embed: async () => (called.push("embed"), []),
+      search: async () => (called.push("search"), []),
+      async *generate() {
+        called.push("generate");
+        yield "";
+      },
+    }), "Hello!");
+    expect(called).toEqual([]);
+    expect(events.map((e) => e.type)).toEqual(["sources", "text", "done"]);
+    expect((events[1] as Extract<ChatEvent, { type: "text" }>).delta).toContain("Global Economic Prospects");
+    expect(events[2]).toMatchObject({ warnings: [], debug: { question: "Hello!", route: { docs: [], paths: [] }, candidates: [] } });
+  });
+
   it("refuses without calling the answer model when nothing is relevant", async () => {
     let generated = false;
     const events = await run(deps({
