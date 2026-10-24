@@ -1,26 +1,63 @@
 @import "tailwindcss";
 
+/* Each report keeps one colour everywhere it appears: scope picker, citations, sources, composer. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --paper: #f2f4f3;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #5d6673;
+  --rule: #d8dde2;
+  --doc-gpo: #2b59a3;
+  --doc-gep: #0b7a62;
+  --doc-imac: #94458f;
+  --doc-all: #18202b;
+  --warn-bg: #fdf1d6;
+  --warn-ink: #7a4b00;
+  --error-bg: #fbe4e2;
+  --error-ink: #9b1c14;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --paper: #12161b;
+    --surface: #1a1f26;
+    --ink: #e6e9ed;
+    --muted: #98a1ad;
+    --rule: #2b323b;
+    --doc-gpo: #86abeb;
+    --doc-gep: #4cc3a3;
+    --doc-imac: #d690cf;
+    --doc-all: #e6e9ed;
+    --warn-bg: #3a2c0c;
+    --warn-ink: #f3cf7a;
+    --error-bg: #3d1714;
+    --error-ink: #f6a8a0;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-ink: var(--warn-ink);
+  --color-error-bg: var(--error-bg);
+  --color-error-ink: var(--error-ink);
+  --font-sans: var(--font-public-sans);
+  --font-serif: var(--font-newsreader);
+}
+
+/* In the base layer so utilities like focus-visible:outline-none can override it. */
+@layer base {
+  body {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--doc, var(--ink));
+    outline-offset: 2px;
+  }
 }
