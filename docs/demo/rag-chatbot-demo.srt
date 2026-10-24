@@ -1,0 +1,63 @@
+1
+00:00:00,000 --> 00:00:06,960
+Document Q&A: a RAG chatbot that answers questions over three PDFs and cites the passage and page behind every claim.
+
+2
+00:00:06,960 --> 00:00:16,040
+The three documents are shaped very differently: a narrative annual report, a 200-page hierarchical economic report, and a visual environmental report.
+
+3
+00:00:16,040 --> 00:00:28,600
+Python ingests the PDFs offline into Postgres with pgvector. Next.js serves the chat API and UI. The database schema is the only contract between them.
+
+4
+00:00:28,600 --> 00:00:42,604
+Each document has its own ingestion profile: style-based headings for GPO, a typographic section tree with summaries for GEP, and Gemini vision plus measured charts for the iMac report.
+
+5
+00:00:42,604 --> 00:00:57,524
+Every question goes through eight steps: condense, route, hybrid search, rerank, assemble, a refusal gate, streamed generation, and figure verification.
+
+6
+00:00:57,524 --> 00:01:03,226
+Pick a report. Ask one report or all three. Each report keeps one colour everywhere: picker, citations, sources and the message box.
+
+7
+00:01:03,226 --> 00:01:13,820
+Ask a question. Sources arrive first, then the answer streams in. Every claim carries an [S#] citation.
+
+8
+00:01:13,820 --> 00:01:21,599
+Check the source. A citation opens the exact passage, with its section path, page and a link to that page of the PDF.
+
+9
+00:01:21,599 --> 00:01:30,577
+See the retrieval. The router's filters, and each candidate's vector rank, keyword rank, fused score and rerank score.
+
+10
+00:01:30,577 --> 00:01:44,095
+Ask a follow-up. Follow-ups are rewritten as standalone questions from the conversation, so "the region" still means South Asia.
+
+11
+00:01:44,095 --> 00:01:56,883
+Charts become facts. The iMac report's carbon split comes from a stacked bar chart, measured from its vector shapes during ingestion.
+
+12
+00:01:56,883 --> 00:02:08,513
+Refuse what isn't there. Out-of-scope questions are refused by the relevance gate, naming the closest sections instead of guessing.
+
+13
+00:02:08,513 --> 00:02:14,917
+Small talk. Greetings get a fixed reply, with no search and no model calls.
+
+14
+00:02:14,917 --> 00:02:19,395
+Light and dark. The interface follows the system theme.
+
+15
+00:02:19,395 --> 00:02:32,595
+The evaluation runs 18 questions with facts copied from the PDFs: every brief question answered with citations, every trap question refused. Ablations show the router matters most.
+
+16
+00:02:32,595 --> 00:02:38,755
+Grounded answers with every claim cited: per-document ingestion, hybrid search with reranking, a refusal gate, figure verification, and an evaluation to prove it.

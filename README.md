@@ -3,6 +3,13 @@
 Document-aware RAG over three differently shaped PDFs (narrative, long hierarchical, visual).
 Design: `docs/superpowers/specs/2026-10-14-rag-chatbot-design.md`.
 
+## Demo
+
+[`docs/demo/rag-chatbot-demo.mp4`](docs/demo/rag-chatbot-demo.mp4) (2:39, narrated; subtitles in
+[`rag-chatbot-demo.srt`](docs/demo/rag-chatbot-demo.srt)): the architecture, the per-document ingestion profiles and
+the answer pipeline, then the live app: cited answers, the sources drawer, retrieval scores, follow-ups, refusals and
+the evaluation results.
+
 ## Setup
 
 1. `cp .env.example .env` and set `GEMINI_API_KEY`.
